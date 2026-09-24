@@ -1,0 +1,17 @@
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server \
+ && CGO_ENABLED=0 go build -o /out/migrations ./cmd/migrations
+
+FROM alpine:3.22
+WORKDIR /app
+COPY --from=build /out/ /app/
+COPY migrations /app/migrations
+COPY internal/adapter/outbound/smtp/templates /app/templates
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+EXPOSE 8080
+ENTRYPOINT ["/app/entrypoint.sh"]

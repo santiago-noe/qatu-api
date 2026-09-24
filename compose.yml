@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: qatu
+      POSTGRES_PASSWORD: qatu
+      POSTGRES_DB: qatu
+    ports: ["5432:5432"]
+    volumes: [qatu_pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qatu -d qatu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [svc]
+  redis:
+    image: redis:8-alpine
+    ports: ["6379:6379"]
+    volumes: [qatu_redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [svc]
+volumes:
+  qatu_pgdata:
+  qatu_redisdata:
+networks:
+  svc:
+    external: true
