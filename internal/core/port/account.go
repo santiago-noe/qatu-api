@@ -39,6 +39,10 @@ type AccountRepository interface {
 	FindUserByEmail(ctx context.Context, email string) (domain.User, error)
 	// SetPassword crea o reemplaza la identidad "password" y audita, en una transacción.
 	SetPassword(ctx context.Context, update PasswordUpdate) error
+	// FindUserIdentity devuelve la identidad del usuario para un proveedor, o domain.ErrNotFound.
+	FindUserIdentity(ctx context.Context, userID string, provider domain.AuthProvider) (domain.AuthIdentity, error)
+	// UpdateName cambia el nombre y audita en una transacción.
+	UpdateName(ctx context.Context, userID, name string, audit domain.AuditEntry) error
 	MarkIdentityUsed(ctx context.Context, identityID string, at time.Time) error
 	UpdateIdentitySecret(ctx context.Context, identityID, secretHash string) error
 	// MarkEmailVerified confirma el correo y registra la auditoría en la misma transacción.
