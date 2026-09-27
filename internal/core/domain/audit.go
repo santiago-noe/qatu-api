@@ -25,4 +25,5 @@ const (
 	AuditRolesChanged     = "user.roles_changed"
 	AuditStatusChanged    = "user.status_changed"
 	AuditTwoFactorPassed  = "user.two_factor_passed"
+	AuditIdentityLinked   = "user.identity_linked"
 )
