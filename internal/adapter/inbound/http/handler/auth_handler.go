@@ -17,7 +17,6 @@ type AuthUseCases interface {
 	Login(ctx context.Context, email, password string, meta domain.SessionMeta) (service.AuthResult, error)
 	Logout(ctx context.Context, session domain.Session) error
 	LogoutAll(ctx context.Context, session domain.Session, ip string) error
-	Me(ctx context.Context, session domain.Session) (domain.User, error)
 }
 
 type AuthHandler struct {
@@ -39,19 +38,6 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// userResponse es la vista pública del usuario (sin datos sensibles).
-type userResponse struct {
-	ID                string        `json:"id"`
-	Email             string        `json:"email,omitempty"`
-	EmailVerified     bool          `json:"email_verified"`
-	Name              string        `json:"name"`
-	AvatarURL         string        `json:"avatar_url,omitempty"`
-	Roles             []domain.Role `json:"roles"`
-	Status            string        `json:"status"`
-	VerificationLevel int           `json:"verification_level"`
-	CanTransact       bool          `json:"can_transact"`
-}
-
 // authResponse: el BFF guarda session.token en su cookie httpOnly; nunca llega al navegador por JSON.
 type authResponse struct {
 	Session struct {
@@ -61,13 +47,6 @@ type authResponse struct {
 	User userResponse `json:"user"`
 	// VerificationSent solo aparece en el registro: si es false, la app ofrece reenviar el código.
 	VerificationSent *bool `json:"verification_sent,omitempty"`
-}
-
-func toUserResponse(u domain.User) userResponse {
-	return userResponse{
-		ID: u.ID, Email: u.Email, EmailVerified: u.EmailVerifiedAt != nil, Name: u.Name, AvatarURL: u.AvatarURL,
-		Roles: u.Roles, Status: string(u.Status), VerificationLevel: u.VerificationLevel, CanTransact: u.CanTransact(),
-	}
 }
 
 func toAuthResponse(r service.AuthResult) authResponse {
@@ -128,14 +107,4 @@ func (h *AuthHandler) LogoutAll(c fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
-}
-
-// GET /api/v1/me (requiere sesión)
-func (h *AuthHandler) Me(c fiber.Ctx) error {
-	session, _ := middleware.SessionFrom(c)
-	user, err := h.auth.Me(c.Context(), session)
-	if err != nil {
-		return err
-	}
-	return c.JSON(toUserResponse(user))
 }
