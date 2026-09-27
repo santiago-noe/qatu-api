@@ -47,6 +47,10 @@ var domainErrors = []struct {
 	{domain.ErrEmailAlreadyVerified, fiber.StatusConflict, "correo_ya_verificado"},
 	// 422 y no 401: la sesión es válida; si fuera 401 el BFF pensaría que venció.
 	{domain.ErrCurrentPasswordInvalid, fiber.StatusUnprocessableEntity, "contrasena_actual_incorrecta"},
+	{domain.ErrRoleNotAssignable, fiber.StatusUnprocessableEntity, "rol_no_asignable"},
+	{domain.ErrSelfLockout, fiber.StatusUnprocessableEntity, "autobloqueo"},
+	{domain.ErrSuspensionReason, fiber.StatusUnprocessableEntity, "motivo_requerido"},
+	{domain.ErrInvalidStatus, fiber.StatusUnprocessableEntity, "estado_invalido"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
