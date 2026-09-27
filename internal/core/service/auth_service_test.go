@@ -78,6 +78,19 @@ func (m *memoryAccounts) UpdateIdentitySecret(_ context.Context, identityID, has
 	return nil
 }
 
+func (m *memoryAccounts) MarkEmailVerified(_ context.Context, userID string, at time.Time, audit domain.AuditEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[userID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	u.EmailVerifiedAt = &at
+	m.users[userID] = u
+	m.audits = append(m.audits, audit)
+	return nil
+}
+
 func (m *memoryAccounts) Record(_ context.Context, e domain.AuditEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -101,6 +114,14 @@ func (b breachedSet) IsBreached(_ context.Context, p string) (bool, error) {
 	return b[strings.ToLower(p)], nil
 }
 
+// recordingSender registra a quién se le envió el código de verificación.
+type recordingSender struct{ sent []string }
+
+func (r *recordingSender) SendCode(_ context.Context, u domain.User) error {
+	r.sent = append(r.sent, u.Email)
+	return nil
+}
+
 type seqIDs struct{ n int }
 
 func (s *seqIDs) NewID() string { s.n++; return fmt.Sprintf("id-%d", s.n) }
@@ -117,8 +138,11 @@ func newAuthFixture(t *testing.T) authFixture {
 	accounts := newMemoryAccounts()
 	hasher := &plainHasher{}
 	sessions, _, clock := newTestSessions()
-	svc, err := NewAuthService(accounts, accounts, hasher, breachedSet{"1234567890": true}, sessions, clock, &seqIDs{},
-		LegalVersions{Terms: "2026-09", Privacy: "2026-09"})
+	svc, err := NewAuthService(AuthDeps{
+		Accounts: accounts, Audit: accounts, Hasher: hasher, Breached: breachedSet{"1234567890": true},
+		Sessions: sessions, Verification: &recordingSender{}, Clock: clock, IDs: &seqIDs{},
+		Legal: LegalVersions{Terms: "2026-09", Privacy: "2026-09"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +175,9 @@ func TestRegister(t *testing.T) {
 	identity, _ := f.accounts.FindIdentity(ctx, domain.ProviderPassword, "ana@correo.pe")
 	if identity.SecretHash == "tornillo-verde-9" {
 		t.Fatal("la contraseña no se guarda en claro")
+	}
+	if sender := f.svc.Verification.(*recordingSender); !res.VerificationSent || len(sender.sent) != 1 || sender.sent[0] != "ana@correo.pe" {
+		t.Fatal("el registro envía el código de verificación al correo")
 	}
 	if len(f.accounts.consents) != 2 || f.accounts.audits[0].Action != domain.AuditUserRegistered {
 		t.Fatalf("faltan consentimientos o auditoría: %+v %+v", f.accounts.consents, f.accounts.audits)
