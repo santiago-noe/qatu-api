@@ -17,6 +17,7 @@ import (
 	"github.com/santiago-noe/qatu-api/internal/adapter/logging"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/argon2"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/breachedlist"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/googleoauth"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/postgres"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/smtp"
@@ -92,11 +93,11 @@ func run() error {
 	verification := service.NewEmailVerificationService(accounts, codes, clock)
 	passwordReset := service.NewPasswordResetService(accounts, codes, passwords, sessions, clock, ids)
 	limiter := redisclient.NewRateLimiter(cache.RDB, redisPrefix)
+	legal := service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion}
 	auth := service.NewAuthService(service.AuthDeps{
 		Accounts: accounts, Audit: accounts, Passwords: passwords, Sessions: sessions,
 		Limiter: limiter, LoginLimit: toLimit(cfg.Limits.LoginPerAccount),
-		Verification: verification, Clock: clock, IDs: ids,
-		Legal: service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion},
+		Verification: verification, Clock: clock, IDs: ids, Legal: legal,
 	})
 
 	account := service.NewAccountService(service.AccountDeps{
@@ -106,6 +107,19 @@ func run() error {
 
 	adminUsers := service.NewAdminUserService(accounts, sessions, clock)
 	twoFactor := service.NewTwoFactorService(accounts, accounts, codes, sessions)
+
+	var google port.OAuthProvider = googleoauth.Disabled{}
+	if cfg.Google.Enabled() {
+		google = googleoauth.New(ctx, googleoauth.Config{ClientID: cfg.Google.ClientID,
+			ClientSecret: cfg.Google.ClientSecret, RedirectURL: cfg.Google.RedirectURL})
+	} else {
+		log.Warn().Msg("APP__GOOGLE__CLIENT_ID vacío: acceso con Google desactivado")
+	}
+	oauth := service.NewOAuthService(service.OAuthDeps{
+		Accounts: accounts, Audit: accounts, Sessions: sessions, Provider: google,
+		States: redisclient.NewOAuthStateStore(cache.RDB, redisPrefix), Clock: clock, IDs: ids,
+		Legal: legal, StateTTL: cfg.Google.StateTTL,
+	})
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
@@ -117,6 +131,7 @@ func run() error {
 			Me:        handler.NewMeHandler(account),
 			Admin:     handler.NewAdminUserHandler(adminUsers),
 			TwoFactor: handler.NewTwoFactorHandler(twoFactor),
+			OAuth:     handler.NewOAuthHandler(oauth),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
