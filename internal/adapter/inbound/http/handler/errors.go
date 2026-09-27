@@ -53,6 +53,8 @@ var domainErrors = []struct {
 	{domain.ErrInvalidStatus, fiber.StatusUnprocessableEntity, "estado_invalido"},
 	{domain.ErrTwoFactorRequired, fiber.StatusForbidden, "dos_pasos_requerido"},
 	{domain.ErrTwoFactorNotPending, fiber.StatusConflict, "dos_pasos_no_pendiente"},
+	{domain.ErrHumanCheckFailed, fiber.StatusForbidden, "captcha_invalido"},
+	{domain.ErrHumanCheckUnavailable, fiber.StatusServiceUnavailable, "captcha_no_disponible"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
