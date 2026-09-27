@@ -15,6 +15,18 @@ type NewAccount struct {
 	Audit    domain.AuditEntry
 }
 
+// PasswordUpdate crea o reemplaza la contraseña de una cuenta.
+type PasswordUpdate struct {
+	UserID     string
+	IdentityID string // se usa si la cuenta aún no tenía contraseña (por ejemplo, entró con Google)
+	Email      string
+	SecretHash string
+	At         time.Time
+	// VerifyEmail: recibir el código en el correo demuestra que es suyo.
+	VerifyEmail bool
+	Audit       domain.AuditEntry
+}
+
 // AccountRepository persiste cuentas e identidades de acceso. Implementación: Postgres.
 type AccountRepository interface {
 	// CreateAccount devuelve domain.ErrEmailTaken si el correo o la identidad ya existen.
@@ -23,6 +35,10 @@ type AccountRepository interface {
 	FindIdentity(ctx context.Context, provider domain.AuthProvider, subject string) (domain.AuthIdentity, error)
 	// FindUser devuelve el usuario con sus roles, o domain.ErrNotFound.
 	FindUser(ctx context.Context, id string) (domain.User, error)
+	// FindUserByEmail devuelve el usuario con sus roles, o domain.ErrNotFound.
+	FindUserByEmail(ctx context.Context, email string) (domain.User, error)
+	// SetPassword crea o reemplaza la identidad "password" y audita, en una transacción.
+	SetPassword(ctx context.Context, update PasswordUpdate) error
 	MarkIdentityUsed(ctx context.Context, identityID string, at time.Time) error
 	UpdateIdentitySecret(ctx context.Context, identityID, secretHash string) error
 	// MarkEmailVerified confirma el correo y registra la auditoría en la misma transacción.
