@@ -148,3 +148,12 @@ func ValidatePasswordShape(password, email string) error {
 	}
 	return nil
 }
+
+// ParseRole valida un rol recibido desde fuera (API, línea de comandos).
+func ParseRole(raw string) (Role, bool) {
+	switch r := Role(raw); r {
+	case RoleClient, RoleLender, RoleProvider, RoleSupport, RoleModerator, RoleAdmin:
+		return r, true
+	}
+	return "", false
+}
