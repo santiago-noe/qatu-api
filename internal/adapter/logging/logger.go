@@ -2,7 +2,6 @@
 package logging
 
 import (
-	"errors"
 	"io"
 	"os"
 	"time"
@@ -23,12 +22,18 @@ func New(production bool) zerolog.Logger {
 }
 
 // Middleware registra método, ruta, estado y duración de cada petición.
+// errorStatus traduce el error devuelto por el handler al estado HTTP que recibirá el cliente
+// (es la misma traducción que usa el ErrorHandler, así el log y la respuesta coinciden).
 // Los 5xx se registran como error; los 4xx como advertencia.
-func Middleware(log zerolog.Logger) fiber.Handler {
+func Middleware(log zerolog.Logger, errorStatus func(error) int) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
-		status := StatusOf(c, err)
+
+		status := c.Response().StatusCode()
+		if err != nil {
+			status = errorStatus(err)
+		}
 
 		event := log.Info()
 		switch {
@@ -45,17 +50,4 @@ func Middleware(log zerolog.Logger) fiber.Handler {
 			Msg("http")
 		return err
 	}
-}
-
-// StatusOf devuelve el estado que recibirá el cliente: si el handler devolvió un error,
-// Fiber lo aplica después del middleware, así que se toma del propio error.
-func StatusOf(c fiber.Ctx, err error) int {
-	if err == nil {
-		return c.Response().StatusCode()
-	}
-	var fe *fiber.Error
-	if errors.As(err, &fe) {
-		return fe.Code
-	}
-	return fiber.StatusInternalServerError
 }
