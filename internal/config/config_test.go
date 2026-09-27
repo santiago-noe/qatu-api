@@ -20,6 +20,7 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("APP__ENV", "production")
+	t.Setenv("APP__SECURITY__CODE_SECRET", "secreto-de-prueba")
 	t.Setenv("APP__HTTP__PORT", "9090")
 	t.Setenv("APP__REDIS__ADDR", "redis:6379")
 
@@ -36,5 +37,25 @@ func TestLoadRejectsInvalidPort(t *testing.T) {
 	t.Setenv("APP__HTTP__PORT", "0")
 	if _, err := Load(); err == nil {
 		t.Fatal("se esperaba error con puerto 0")
+	}
+}
+
+func TestProductionRequiresCodeSecret(t *testing.T) {
+	t.Setenv("APP__ENV", "production")
+	if _, err := Load(); err == nil {
+		t.Fatal("en producción sin APP__SECURITY__CODE_SECRET debe fallar")
+	}
+}
+
+func TestCodesDefaults(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Codes.TTL != 15*time.Minute || cfg.Codes.MaxAttempts != 5 || cfg.Codes.ResendCooldown != time.Minute {
+		t.Fatalf("códigos inesperados: %+v", cfg.Codes)
+	}
+	if cfg.Security.CodeSecret == "" || cfg.SMTP.Port != 1025 {
+		t.Fatalf("en desarrollo hay valores por defecto: %+v %+v", cfg.Security, cfg.SMTP)
 	}
 }
