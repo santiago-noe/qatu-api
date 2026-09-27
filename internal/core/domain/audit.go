@@ -24,4 +24,5 @@ const (
 	AuditSessionRevoked   = "user.session_revoked"
 	AuditRolesChanged     = "user.roles_changed"
 	AuditStatusChanged    = "user.status_changed"
+	AuditTwoFactorPassed  = "user.two_factor_passed"
 )
