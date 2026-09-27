@@ -40,6 +40,9 @@ func (r Role) IsInternal() bool {
 	return r == RoleSupport || r == RoleModerator || r == RoleAdmin
 }
 
+// hasInternalRole: con un rol interno la verificación en dos pasos es obligatoria.
+func hasInternalRole(roles []Role) bool { return slices.ContainsFunc(roles, Role.IsInternal) }
+
 // AuthProvider identifica una forma de entrar a la cuenta. Agregar OTP (feature 022)
 // es un valor nuevo aquí y un adaptador nuevo; el resto del dominio no cambia.
 type AuthProvider string
@@ -94,9 +97,7 @@ func (u User) CanSignIn() error {
 func (u User) CanTransact() bool { return u.Status == UserActive && u.IsVerified() }
 
 // RequiresTwoFactor: obligatorio para roles internos (decisión de clarify).
-func (u User) RequiresTwoFactor() bool {
-	return slices.ContainsFunc(u.Roles, Role.IsInternal)
-}
+func (u User) RequiresTwoFactor() bool { return hasInternalRole(u.Roles) }
 
 // AuthIdentity es una forma de entrar a una cuenta.
 type AuthIdentity struct {
