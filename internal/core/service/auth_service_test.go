@@ -45,6 +45,19 @@ func (m *memoryAccounts) CreateAccount(_ context.Context, a port.NewAccount) err
 	return nil
 }
 
+func (m *memoryAccounts) LinkIdentity(_ context.Context, identity domain.AuthIdentity, audit domain.AuditEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, id := range m.identities {
+		if id.UserID == identity.UserID && id.Provider == identity.Provider {
+			return domain.ErrOAuthAlreadyLinked
+		}
+	}
+	m.identities[identityKey(identity.Provider, identity.ProviderSubject)] = identity
+	m.audits = append(m.audits, audit)
+	return nil
+}
+
 func (m *memoryAccounts) FindIdentity(_ context.Context, p domain.AuthProvider, subject string) (domain.AuthIdentity, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
