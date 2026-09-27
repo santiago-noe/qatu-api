@@ -94,6 +94,27 @@ func (m *memoryAccounts) SetPassword(_ context.Context, up port.PasswordUpdate) 
 	return nil
 }
 
+func (m *memoryAccounts) FindUserIdentity(_ context.Context, userID string, p domain.AuthProvider) (domain.AuthIdentity, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, id := range m.identities {
+		if id.UserID == userID && id.Provider == p {
+			return id, nil
+		}
+	}
+	return domain.AuthIdentity{}, domain.ErrNotFound
+}
+
+func (m *memoryAccounts) UpdateName(_ context.Context, userID, name string, audit domain.AuditEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u := m.users[userID]
+	u.Name = name
+	m.users[userID] = u
+	m.audits = append(m.audits, audit)
+	return nil
+}
+
 func (m *memoryAccounts) MarkIdentityUsed(context.Context, string, time.Time) error { return nil }
 
 func (m *memoryAccounts) UpdateIdentitySecret(_ context.Context, identityID, hash string) error {
@@ -144,6 +165,31 @@ func (b breachedSet) IsBreached(_ context.Context, p string) (bool, error) {
 	return b[strings.ToLower(p)], nil
 }
 
+// memoryLimiter cuenta intentos por clave sin ventana de tiempo.
+type memoryLimiter struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func newMemoryLimiter() *memoryLimiter { return &memoryLimiter{counts: map[string]int{}} }
+
+func (l *memoryLimiter) Allow(_ context.Context, key string, limit domain.Limit) (bool, time.Duration, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.counts[key] >= limit.Max {
+		return false, limit.Window, nil
+	}
+	l.counts[key]++
+	return true, 0, nil
+}
+
+func (l *memoryLimiter) Reset(_ context.Context, key string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.counts, key)
+	return nil
+}
+
 // recordingSender registra a quién se le envió el código de verificación.
 type recordingSender struct{ sent []string }
 
@@ -174,7 +220,8 @@ func newAuthFixture(t *testing.T) authFixture {
 	}
 	svc := NewAuthService(AuthDeps{
 		Accounts: accounts, Audit: accounts, Passwords: passwords,
-		Sessions: sessions, Verification: &recordingSender{}, Clock: clock, IDs: &seqIDs{},
+		Sessions: sessions, Limiter: newMemoryLimiter(), LoginLimit: domain.Limit{Max: 5, Window: 15 * time.Minute},
+		Verification: &recordingSender{}, Clock: clock, IDs: &seqIDs{},
 		Legal: LegalVersions{Terms: "2026-09", Privacy: "2026-09"},
 	})
 	return authFixture{svc: svc, accounts: accounts, hasher: hasher, sessions: sessions}
@@ -336,5 +383,46 @@ func TestLogoutAll(t *testing.T) {
 		if _, err := f.sessions.Authenticate(ctx, tok); !errors.Is(err, domain.ErrSessionInvalid) {
 			t.Fatal("cerrar en todos invalida todas las sesiones")
 		}
+	}
+}
+
+func TestLoginLimitPerAccount(t *testing.T) {
+	f := newAuthFixture(t)
+	ctx := context.Background()
+	_, _ = f.svc.Register(ctx, validRegister())
+
+	for range 5 {
+		_, _ = f.svc.Login(ctx, "ana@correo.pe", "mala-contrasena-9", domain.SessionMeta{})
+	}
+	_, err := f.svc.Login(ctx, "ana@correo.pe", "tornillo-verde-9", domain.SessionMeta{})
+	var rl *domain.RateLimitError
+	if !errors.As(err, &rl) || rl.RetryAfter <= 0 {
+		t.Fatalf("tras 5 intentos se bloquea incluso con la contraseña correcta, llegó %v", err)
+	}
+
+	// Un correo inexistente se limita igual: el bloqueo no revela si la cuenta existe.
+	for range 5 {
+		_, _ = f.svc.Login(ctx, "nadie@correo.pe", "x-cualquier-9", domain.SessionMeta{})
+	}
+	if _, err := f.svc.Login(ctx, "nadie@correo.pe", "x-cualquier-9", domain.SessionMeta{}); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("se esperaba el mismo bloqueo, llegó %v", err)
+	}
+}
+
+func TestSuccessfulLoginResetsAttempts(t *testing.T) {
+	f := newAuthFixture(t)
+	ctx := context.Background()
+	_, _ = f.svc.Register(ctx, validRegister())
+	for range 4 {
+		_, _ = f.svc.Login(ctx, "ana@correo.pe", "mala-contrasena-9", domain.SessionMeta{})
+	}
+	if _, err := f.svc.Login(ctx, "ana@correo.pe", "tornillo-verde-9", domain.SessionMeta{}); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
+		_, _ = f.svc.Login(ctx, "ana@correo.pe", "mala-contrasena-9", domain.SessionMeta{})
+	}
+	if _, err := f.svc.Login(ctx, "ana@correo.pe", "tornillo-verde-9", domain.SessionMeta{}); err != nil {
+		t.Fatalf("tras un inicio correcto el contador vuelve a cero: %v", err)
 	}
 }
