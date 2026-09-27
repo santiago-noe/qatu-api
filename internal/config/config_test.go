@@ -59,3 +59,14 @@ func TestCodesDefaults(t *testing.T) {
 		t.Fatalf("en desarrollo hay valores por defecto: %+v %+v", cfg.Security, cfg.SMTP)
 	}
 }
+
+func TestRateLimitDefaults(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Limits.LoginPerAccount.Max != 5 || cfg.Limits.LoginPerAccount.Window != 15*time.Minute ||
+		cfg.Limits.AuthPerIP.Max <= 0 || !cfg.HTTP.TrustPrivateProxies {
+		t.Fatalf("límites inesperados: %+v %+v", cfg.Limits, cfg.HTTP)
+	}
+}
