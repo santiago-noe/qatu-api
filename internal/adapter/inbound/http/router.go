@@ -29,6 +29,8 @@ type Middlewares struct {
 	Session fiber.Handler
 	// RateLimit limita por IP una ruta pública; name separa los contadores.
 	RateLimit func(name string) fiber.Handler
+	// Human exige el captcha de Turnstile; action es el nombre del formulario en el widget.
+	Human func(action string) fiber.Handler
 }
 
 type Options struct {
@@ -53,13 +55,13 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	v1.Get("/health", h.Health.Get)
 
 	auth := v1.Group("/auth")
-	auth.Post("/register", m.RateLimit("register"), h.Auth.Register)
+	auth.Post("/register", m.RateLimit("register"), m.Human("register"), h.Auth.Register)
 	auth.Post("/login", m.RateLimit("login"), h.Auth.Login)
 	auth.Post("/logout", m.Session, h.Auth.Logout)
 	auth.Post("/logout-all", m.Session, h.Auth.LogoutAll)
 	auth.Post("/email/verify", m.Session, h.Email.Verify)
 	auth.Post("/email/resend", m.Session, h.Email.Resend)
-	auth.Post("/password/forgot", m.RateLimit("password_forgot"), h.Password.Forgot)
+	auth.Post("/password/forgot", m.RateLimit("password_forgot"), m.Human("password_forgot"), h.Password.Forgot)
 	auth.Post("/password/reset", m.RateLimit("password_reset"), h.Password.Reset)
 	auth.Post("/two-factor/send", m.Session, h.TwoFactor.Send)
 	auth.Post("/two-factor/verify", m.Session, h.TwoFactor.Verify)
