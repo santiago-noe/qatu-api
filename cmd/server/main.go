@@ -22,6 +22,7 @@ import (
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/smtp"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/system"
 	"github.com/santiago-noe/qatu-api/internal/config"
+	"github.com/santiago-noe/qatu-api/internal/core/domain"
 	"github.com/santiago-noe/qatu-api/internal/core/service"
 )
 
@@ -82,10 +83,17 @@ func run() error {
 		service.CodesConfig{TTL: cfg.Codes.TTL, MaxAttempts: cfg.Codes.MaxAttempts, ResendCooldown: cfg.Codes.ResendCooldown})
 	verification := service.NewEmailVerificationService(accounts, codes, clock)
 	passwordReset := service.NewPasswordResetService(accounts, codes, passwords, sessions, clock, ids)
+	limiter := redisclient.NewRateLimiter(cache.RDB, redisPrefix)
 	auth := service.NewAuthService(service.AuthDeps{
 		Accounts: accounts, Audit: accounts, Passwords: passwords, Sessions: sessions,
+		Limiter: limiter, LoginLimit: toLimit(cfg.Limits.LoginPerAccount),
 		Verification: verification, Clock: clock, IDs: ids,
 		Legal: service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion},
+	})
+
+	account := service.NewAccountService(service.AccountDeps{
+		Accounts: accounts, Audit: accounts, Passwords: passwords, Sessions: sessions,
+		Limiter: limiter, PasswordLimit: toLimit(cfg.Limits.LoginPerAccount), Clock: clock, IDs: ids,
 	})
 
 	// Adaptadores de entrada.
@@ -95,10 +103,15 @@ func run() error {
 			Auth:     handler.NewAuthHandler(auth),
 			Email:    handler.NewEmailVerificationHandler(verification),
 			Password: handler.NewPasswordResetHandler(passwordReset),
+			Me:       handler.NewMeHandler(account),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
+			RateLimit: func(name string) fiber.Handler {
+				return middleware.RateLimitByIP(limiter, name, toLimit(cfg.Limits.AuthPerIP))
+			},
 		},
+		apihttp.Options{TrustPrivateProxies: cfg.HTTP.TrustPrivateProxies},
 	)
 
 	errCh := make(chan error, 1)
@@ -119,3 +132,5 @@ func run() error {
 	defer cancel()
 	return app.ShutdownWithContext(shutdownCtx)
 }
+
+func toLimit(l config.LimitConfig) domain.Limit { return domain.Limit{Max: l.Max, Window: l.Window} }
