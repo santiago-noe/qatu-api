@@ -27,6 +27,24 @@ type PasswordUpdate struct {
 	Audit       domain.AuditEntry
 }
 
+// RoleChange agrega y quita roles de un usuario en una transacción.
+type RoleChange struct {
+	UserID    string
+	Add       []domain.Role
+	Remove    []domain.Role
+	GrantedBy string // vacío si lo hace el sistema (por ejemplo, el comando de arranque)
+	At        time.Time
+	Audit     domain.AuditEntry
+}
+
+// StatusChange cambia el estado de la cuenta (activa o suspendida) en una transacción.
+type StatusChange struct {
+	UserID string
+	Status domain.UserStatus
+	Reason string // obligatorio al suspender; se borra al reactivar
+	Audit  domain.AuditEntry
+}
+
 // AccountRepository persiste cuentas e identidades de acceso. Implementación: Postgres.
 type AccountRepository interface {
 	// CreateAccount devuelve domain.ErrEmailTaken si el correo o la identidad ya existen.
@@ -43,6 +61,8 @@ type AccountRepository interface {
 	FindUserIdentity(ctx context.Context, userID string, provider domain.AuthProvider) (domain.AuthIdentity, error)
 	// UpdateName cambia el nombre y audita en una transacción.
 	UpdateName(ctx context.Context, userID, name string, audit domain.AuditEntry) error
+	ChangeRoles(ctx context.Context, change RoleChange) error
+	ChangeStatus(ctx context.Context, change StatusChange) error
 	MarkIdentityUsed(ctx context.Context, identityID string, at time.Time) error
 	UpdateIdentitySecret(ctx context.Context, identityID, secretHash string) error
 	// MarkEmailVerified confirma el correo y registra la auditoría en la misma transacción.
