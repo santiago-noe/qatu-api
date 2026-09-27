@@ -28,4 +28,6 @@ var (
 	ErrSelfLockout            = errors.New("no puedes quitarte el rol de admin ni suspender tu propia cuenta")
 	ErrSuspensionReason       = errors.New("indica el motivo de la suspensión")
 	ErrInvalidStatus          = errors.New("estado de cuenta inválido")
+	ErrTwoFactorRequired      = errors.New("confirma el código que enviamos a tu correo para continuar")
+	ErrTwoFactorNotPending    = errors.New("esta sesión no necesita verificación en dos pasos")
 )
