@@ -25,6 +25,16 @@ services:
       timeout: 3s
       retries: 10
     networks: [svc]
+  # Correo de desarrollo: recibe todo lo que envía la API. Bandeja en http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.31
+    ports: ["1025:1025", "8025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [svc]
 volumes:
   qatu_pgdata:
   qatu_redisdata:
