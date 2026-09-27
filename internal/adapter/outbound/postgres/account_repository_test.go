@@ -223,4 +223,36 @@ func TestAccountRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("una cuenta creada con Google llega verificada y con foto", func(t *testing.T) {
+		google := newAccount("carla@gmail.com")
+		verified := google.User.CreatedAt
+		google.User.EmailVerifiedAt, google.User.AvatarURL = &verified, "https://lh3.googleusercontent.com/carla"
+		google.Identity.Provider, google.Identity.ProviderSubject, google.Identity.SecretHash = domain.ProviderGoogle, "sub-carla", ""
+		if err := repo.CreateAccount(ctx, google); err != nil {
+			t.Fatal(err)
+		}
+		user, err := repo.FindUser(ctx, google.User.ID)
+		if err != nil || !user.IsVerified() || user.AvatarURL != "https://lh3.googleusercontent.com/carla" {
+			t.Fatalf("FindUser = %+v, %v", user, err)
+		}
+	})
+
+	t.Run("vincular Google a una cuenta existente", func(t *testing.T) {
+		link := func(subject string) error {
+			identity := domain.AuthIdentity{ID: uuid.NewString(), UserID: acc.User.ID, Provider: domain.ProviderGoogle,
+				ProviderSubject: subject, CreatedAt: time.Now()}
+			audit := domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditIdentityLinked, Entity: "user", EntityID: acc.User.ID}
+			return repo.LinkIdentity(ctx, identity, audit)
+		}
+		if err := link("sub-ana"); err != nil {
+			t.Fatal(err)
+		}
+		if identity, err := repo.FindIdentity(ctx, domain.ProviderGoogle, "sub-ana"); err != nil || identity.UserID != acc.User.ID {
+			t.Fatalf("FindIdentity = %+v, %v", identity, err)
+		}
+		if err := link("sub-otra"); !errors.Is(err, domain.ErrOAuthAlreadyLinked) {
+			t.Fatalf("una cuenta tiene un solo Google, llegó %v", err)
+		}
+	})
 }
