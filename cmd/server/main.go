@@ -97,16 +97,18 @@ func run() error {
 	})
 
 	adminUsers := service.NewAdminUserService(accounts, sessions, clock)
+	twoFactor := service.NewTwoFactorService(accounts, accounts, codes, sessions)
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
 		apihttp.Handlers{
-			Health:   handler.NewHealthHandler(health),
-			Auth:     handler.NewAuthHandler(auth),
-			Email:    handler.NewEmailVerificationHandler(verification),
-			Password: handler.NewPasswordResetHandler(passwordReset),
-			Me:       handler.NewMeHandler(account),
-			Admin:    handler.NewAdminUserHandler(adminUsers),
+			Health:    handler.NewHealthHandler(health),
+			Auth:      handler.NewAuthHandler(auth),
+			Email:     handler.NewEmailVerificationHandler(verification),
+			Password:  handler.NewPasswordResetHandler(passwordReset),
+			Me:        handler.NewMeHandler(account),
+			Admin:     handler.NewAdminUserHandler(adminUsers),
+			TwoFactor: handler.NewTwoFactorHandler(twoFactor),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
