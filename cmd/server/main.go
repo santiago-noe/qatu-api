@@ -96,6 +96,8 @@ func run() error {
 		Limiter: limiter, PasswordLimit: toLimit(cfg.Limits.LoginPerAccount), Clock: clock, IDs: ids,
 	})
 
+	adminUsers := service.NewAdminUserService(accounts, sessions, clock)
+
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
 		apihttp.Handlers{
@@ -104,6 +106,7 @@ func run() error {
 			Email:    handler.NewEmailVerificationHandler(verification),
 			Password: handler.NewPasswordResetHandler(passwordReset),
 			Me:       handler.NewMeHandler(account),
+			Admin:    handler.NewAdminUserHandler(adminUsers),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
