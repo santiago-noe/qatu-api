@@ -96,3 +96,18 @@ func TestUserRules(t *testing.T) {
 		t.Fatal("los roles internos requieren dos pasos")
 	}
 }
+
+func TestSessionNeedsTwoFactor(t *testing.T) {
+	now := time.Now()
+	if (Session{Roles: []Role{RoleClient, RoleLender}}).NeedsTwoFactor() {
+		t.Fatal("una sesión sin roles internos no pide dos pasos")
+	}
+	staff := Session{Roles: []Role{RoleClient, RoleModerator}}
+	if !staff.NeedsTwoFactor() {
+		t.Fatal("una sesión con rol interno queda pendiente hasta confirmar el código")
+	}
+	staff.TwoFactorAt = &now
+	if staff.NeedsTwoFactor() {
+		t.Fatal("tras confirmar el código la sesión ya no está pendiente")
+	}
+}
