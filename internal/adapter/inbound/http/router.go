@@ -14,12 +14,13 @@ import (
 
 // Handlers agrupa los handlers de cada feature; se amplía al agregar features.
 type Handlers struct {
-	Health   *handler.HealthHandler
-	Auth     *handler.AuthHandler
-	Email    *handler.EmailVerificationHandler
-	Password *handler.PasswordResetHandler
-	Me       *handler.MeHandler
-	Admin    *handler.AdminUserHandler
+	Health    *handler.HealthHandler
+	Auth      *handler.AuthHandler
+	Email     *handler.EmailVerificationHandler
+	Password  *handler.PasswordResetHandler
+	Me        *handler.MeHandler
+	Admin     *handler.AdminUserHandler
+	TwoFactor *handler.TwoFactorHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -60,6 +61,8 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	auth.Post("/email/resend", m.Session, h.Email.Resend)
 	auth.Post("/password/forgot", m.RateLimit("password_forgot"), h.Password.Forgot)
 	auth.Post("/password/reset", m.RateLimit("password_reset"), h.Password.Reset)
+	auth.Post("/two-factor/send", m.Session, h.TwoFactor.Send)
+	auth.Post("/two-factor/verify", m.Session, h.TwoFactor.Verify)
 
 	me := v1.Group("/me", m.Session)
 	me.Get("/", h.Me.Get)
@@ -68,10 +71,16 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Get("/sessions", h.Me.Sessions)
 	me.Delete("/sessions/:id", h.Me.RevokeSession)
 
-	admin := v1.Group("/admin", m.Session, middleware.RequireRole(domain.RoleAdmin))
+	admin := v1.Group("/admin", staff(m, domain.RoleAdmin)...)
 	admin.Get("/users/:id", h.Admin.Get)
 	admin.Patch("/users/:id/roles", h.Admin.ChangeRoles)
 	admin.Patch("/users/:id/status", h.Admin.ChangeStatus)
 
 	return app
+}
+
+// staff protege las rutas internas: sesión, alguno de los roles y segundo paso confirmado.
+// Soporte y moderación usarán lo mismo con sus roles.
+func staff(m Middlewares, roles ...domain.Role) []any {
+	return []any{m.Session, middleware.RequireRole(roles...), middleware.RequireTwoFactor()}
 }
