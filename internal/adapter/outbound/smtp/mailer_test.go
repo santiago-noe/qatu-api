@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/santiago-noe/qatu-api/internal/core/domain"
+	"github.com/santiago-noe/qatu-api/internal/core/port"
 )
 
 func TestBuildMessage(t *testing.T) {
@@ -19,8 +22,10 @@ func TestBuildMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	to, _ := mail.ParseAddress("ana@correo.pe")
-	data := map[string]string{"Name": "<script>Ana</script>", "Code": "482913", "ValidFor": humanDuration(15 * time.Minute)}
-	raw, err := m.build(to, "Tu código de verificación de Qatu: 482913", "email_verification", data)
+	texts := codeTexts[domain.CodeEmailVerification]
+	data := map[string]string{"Name": "<script>Ana</script>", "Code": "482913", "ValidFor": humanDuration(15 * time.Minute),
+		"Intro": texts.Intro, "Ignore": texts.Ignore}
+	raw, err := m.build(to, "Tu código de verificación de Qatu: 482913", "code", data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +52,18 @@ func TestBuildMessage(t *testing.T) {
 	}
 }
 
+func TestEveryCodePurposeHasTexts(t *testing.T) {
+	for _, p := range []domain.CodePurpose{domain.CodeEmailVerification, domain.CodePasswordReset, domain.CodeTwoFactor} {
+		if texts, ok := codeTexts[p]; !ok || texts.Subject == "" || texts.Intro == "" || texts.Ignore == "" {
+			t.Fatalf("falta el texto del correo para %s", p)
+		}
+	}
+	m, _ := New(Config{Host: "localhost", Port: 1025, From: "Qatu <no-responder@qatu.local>"})
+	if err := m.SendCode(context.Background(), port.CodeEmail{Purpose: "desconocida", To: "a@b.pe"}); err == nil {
+		t.Fatal("una finalidad sin texto debe fallar")
+	}
+}
+
 func TestNewRejectsInvalidSender(t *testing.T) {
 	if _, err := New(Config{From: "no es un correo"}); err == nil {
 		t.Fatal("un remitente inválido debe fallar al arrancar")
@@ -64,7 +81,8 @@ func TestSendThroughMailpit(t *testing.T) {
 		t.Fatal(err)
 	}
 	to := fmt.Sprintf("prueba.%d@correo.pe", time.Now().UnixNano())
-	if err := m.SendEmailVerification(context.Background(), to, "Ana", "482913", 15*time.Minute); err != nil {
+	email := port.CodeEmail{Purpose: domain.CodePasswordReset, To: to, Name: "Ana", Code: "482913", ValidFor: 15 * time.Minute}
+	if err := m.SendCode(context.Background(), email); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,7 +99,7 @@ func TestSendThroughMailpit(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&found); err != nil {
 		t.Fatal(err)
 	}
-	if len(found.Messages) != 1 || !strings.Contains(found.Messages[0].Subject, "482913") {
+	if len(found.Messages) != 1 || !strings.Contains(found.Messages[0].Subject, "recuperar tu contraseña") {
 		t.Fatalf("Mailpit no recibió el correo: %+v", found)
 	}
 }
