@@ -28,17 +28,14 @@ func NewAccountRepository(db *Client) *AccountRepository { return &AccountReposi
 func (r *AccountRepository) CreateAccount(ctx context.Context, a port.NewAccount) error {
 	err := pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
 		u := a.User
+		// Con Google el correo ya llega verificado (EmailVerifiedAt) y con foto.
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO users (id, email, name, adult_declared_at, status, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-			u.ID, u.Email, u.Name, u.AdultDeclaredAt, u.Status, u.CreatedAt); err != nil {
+			INSERT INTO users (id, email, email_verified_at, name, avatar_url, adult_declared_at, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $8)`,
+			u.ID, u.Email, u.EmailVerifiedAt, u.Name, u.AvatarURL, u.AdultDeclaredAt, u.Status, u.CreatedAt); err != nil {
 			return err
 		}
-		id := a.Identity
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO auth_identities (id, user_id, provider, provider_subject, secret_hash, created_at, last_used_at)
-			VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7)`,
-			id.ID, id.UserID, id.Provider, id.ProviderSubject, id.SecretHash, id.CreatedAt, id.LastUsedAt); err != nil {
+		if err := insertIdentity(ctx, tx, a.Identity); err != nil {
 			return err
 		}
 		for _, role := range u.Roles {
@@ -57,11 +54,39 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, a port.NewAccount
 		return insertAudit(ctx, tx, a.Audit)
 	})
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+	if isUniqueViolation(err, "") {
 		return domain.ErrEmailTaken
 	}
 	return err
+}
+
+// LinkIdentity agrega una identidad a una cuenta existente y audita, en una transacción.
+func (r *AccountRepository) LinkIdentity(ctx context.Context, identity domain.AuthIdentity, audit domain.AuditEntry) error {
+	err := pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		if err := insertIdentity(ctx, tx, identity); err != nil {
+			return err
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+	if isUniqueViolation(err, "auth_identities_one_per_provider") {
+		return domain.ErrOAuthAlreadyLinked
+	}
+	return err
+}
+
+func insertIdentity(ctx context.Context, tx pgx.Tx, id domain.AuthIdentity) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO auth_identities (id, user_id, provider, provider_subject, secret_hash, created_at, last_used_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7)`,
+		id.ID, id.UserID, id.Provider, id.ProviderSubject, id.SecretHash, id.CreatedAt, id.LastUsedAt)
+	return err
+}
+
+// isUniqueViolation: la restricción constraint (vacía = cualquiera) rechazó un duplicado.
+func isUniqueViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation &&
+		(constraint == "" || pgErr.ConstraintName == constraint)
 }
 
 func (r *AccountRepository) FindIdentity(ctx context.Context, provider domain.AuthProvider, subject string) (domain.AuthIdentity, error) {
