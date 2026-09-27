@@ -40,10 +40,13 @@ type VerificationSender interface {
 
 // AuthDeps agrupa las dependencias de AuthService.
 type AuthDeps struct {
-	Accounts     port.AccountRepository
-	Audit        port.AuditLog
-	Passwords    *PasswordPolicy
-	Sessions     *SessionService
+	Accounts  port.AccountRepository
+	Audit     port.AuditLog
+	Passwords *PasswordPolicy
+	Sessions  *SessionService
+	Limiter   port.RateLimiter
+	// LoginLimit: intentos por cuenta (5 cada 15 minutos, decisión de clarify).
+	LoginLimit   domain.Limit
 	Verification VerificationSender
 	Clock        port.Clock
 	IDs          port.IDGenerator
@@ -125,6 +128,16 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta do
 	if err != nil {
 		return AuthResult{}, domain.ErrInvalidCredentials
 	}
+	// Límite por cuenta (exista o no, para no revelarla). Frena a quien prueba contraseñas
+	// desde muchas IP contra la misma cuenta; el límite por IP lo pone el middleware.
+	limitKey := "login:account:" + normalized
+	allowed, retryAfter, err := s.Limiter.Allow(ctx, limitKey, s.LoginLimit)
+	if err != nil {
+		return AuthResult{}, err
+	}
+	if !allowed {
+		return AuthResult{}, &domain.RateLimitError{RetryAfter: retryAfter}
+	}
 	identity, err := s.Accounts.FindIdentity(ctx, domain.ProviderPassword, normalized)
 	if errors.Is(err, domain.ErrNotFound) {
 		s.Passwords.VerifyDummy(password)
@@ -151,6 +164,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta do
 		return AuthResult{}, domain.ErrInvalidCredentials
 	}
 
+	_ = s.Limiter.Reset(ctx, limitKey) // un inicio correcto limpia los intentos fallidos
 	if needsRehash {
 		s.rehash(ctx, identity, password, user.ID, meta.IP)
 	}
@@ -182,11 +196,6 @@ func (s *AuthService) LogoutAll(ctx context.Context, session domain.Session, ip 
 		ActorID: session.UserID, Action: domain.AuditSessionsRevoked, Entity: "user", EntityID: session.UserID, IP: ip,
 	})
 	return nil
-}
-
-// Me devuelve el usuario de la sesión actual.
-func (s *AuthService) Me(ctx context.Context, session domain.Session) (domain.User, error) {
-	return s.Accounts.FindUser(ctx, session.UserID)
 }
 
 func (s *AuthService) startSession(ctx context.Context, user domain.User, meta domain.SessionMeta) (AuthResult, error) {
