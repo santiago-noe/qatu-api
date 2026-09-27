@@ -119,6 +119,23 @@ func (r *AccountRepository) UpdateIdentitySecret(ctx context.Context, identityID
 	return err
 }
 
+// MarkEmailVerified confirma el correo y audita en la misma transacción. Si ya estaba
+// verificado no cambia nada (la fecha original se conserva).
+func (r *AccountRepository) MarkEmailVerified(ctx context.Context, userID string, at time.Time, audit domain.AuditEntry) error {
+	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE users SET email_verified_at = $2, version = version + 1
+			WHERE id = $1 AND email_verified_at IS NULL`, userID, at)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrEmailAlreadyVerified
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+}
+
 // Record implementa port.AuditLog fuera de una transacción de negocio.
 func (r *AccountRepository) Record(ctx context.Context, entry domain.AuditEntry) error {
 	return insertAudit(ctx, r.db.Pool, entry)
