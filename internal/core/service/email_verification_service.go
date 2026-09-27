@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
 	"github.com/santiago-noe/qatu-api/internal/core/port"
@@ -12,12 +11,11 @@ import (
 type EmailVerificationService struct {
 	accounts port.AccountRepository
 	codes    *OneTimeCodes
-	mailer   port.Mailer
 	clock    port.Clock
 }
 
-func NewEmailVerificationService(accounts port.AccountRepository, codes *OneTimeCodes, mailer port.Mailer, clock port.Clock) *EmailVerificationService {
-	return &EmailVerificationService{accounts: accounts, codes: codes, mailer: mailer, clock: clock}
+func NewEmailVerificationService(accounts port.AccountRepository, codes *OneTimeCodes, clock port.Clock) *EmailVerificationService {
+	return &EmailVerificationService{accounts: accounts, codes: codes, clock: clock}
 }
 
 // SendCode envía un código nuevo al correo del usuario (como máximo uno por minuto).
@@ -25,17 +23,7 @@ func (s *EmailVerificationService) SendCode(ctx context.Context, user domain.Use
 	if user.EmailVerifiedAt != nil {
 		return domain.ErrEmailAlreadyVerified
 	}
-	if user.Email == "" {
-		return domain.ErrInvalidEmail
-	}
-	code, err := s.codes.Issue(ctx, domain.CodeEmailVerification, user.ID)
-	if err != nil {
-		return err
-	}
-	if err := s.mailer.SendEmailVerification(ctx, user.Email, user.Name, code, s.codes.ValidFor()); err != nil {
-		return fmt.Errorf("verificación de correo: enviar: %w", err)
-	}
-	return nil
+	return s.codes.Send(ctx, domain.CodeEmailVerification, user)
 }
 
 // Resend envía un código nuevo al usuario de la sesión.
