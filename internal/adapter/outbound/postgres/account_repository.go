@@ -81,6 +81,15 @@ func (r *AccountRepository) FindIdentity(ctx context.Context, provider domain.Au
 }
 
 func (r *AccountRepository) FindUser(ctx context.Context, userID string) (domain.User, error) {
+	return r.findUserWhere(ctx, "u.id = $1", userID)
+}
+
+func (r *AccountRepository) FindUserByEmail(ctx context.Context, email string) (domain.User, error) {
+	return r.findUserWhere(ctx, "u.email = $1", email)
+}
+
+// findUserWhere es la única consulta de usuario con sus roles; cambia solo el filtro.
+func (r *AccountRepository) findUserWhere(ctx context.Context, where string, arg any) (domain.User, error) {
 	var u domain.User
 	var email, phone, avatar, reason *string
 	var roles []string
@@ -90,8 +99,8 @@ func (r *AccountRepository) FindUser(ctx context.Context, userID string) (domain
 		       u.created_at, u.updated_at, u.version,
 		       COALESCE(array_agg(r.role ORDER BY r.role) FILTER (WHERE r.role IS NOT NULL), '{}')
 		FROM users u LEFT JOIN user_roles r ON r.user_id = u.id
-		WHERE u.id = $1
-		GROUP BY u.id`, userID).Scan(
+		WHERE `+where+`
+		GROUP BY u.id`, arg).Scan(
 		&u.ID, &email, &u.EmailVerifiedAt, &phone, &u.PhoneVerifiedAt, &u.Name, &avatar,
 		&u.AdultDeclaredAt, &u.Status, &reason, &u.VerificationLevel,
 		&u.CreatedAt, &u.UpdatedAt, &u.Version, &roles)
@@ -133,6 +142,29 @@ func (r *AccountRepository) MarkEmailVerified(ctx context.Context, userID string
 			return domain.ErrEmailAlreadyVerified
 		}
 		return insertAudit(ctx, tx, audit)
+	})
+}
+
+// SetPassword crea la identidad "password" o reemplaza su hash, opcionalmente verifica el
+// correo y audita, todo en una transacción.
+func (r *AccountRepository) SetPassword(ctx context.Context, up port.PasswordUpdate) error {
+	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO auth_identities (id, user_id, provider, provider_subject, secret_hash, created_at)
+			VALUES ($1, $2, 'password', $3, $4, $5)
+			ON CONFLICT ON CONSTRAINT auth_identities_one_per_provider
+			DO UPDATE SET secret_hash = EXCLUDED.secret_hash, provider_subject = EXCLUDED.provider_subject`,
+			up.IdentityID, up.UserID, up.Email, up.SecretHash, up.At); err != nil {
+			return err
+		}
+		if up.VerifyEmail {
+			if _, err := tx.Exec(ctx, `
+				UPDATE users SET email_verified_at = COALESCE(email_verified_at, $2), version = version + 1
+				WHERE id = $1`, up.UserID, up.At); err != nil {
+				return err
+			}
+		}
+		return insertAudit(ctx, tx, up.Audit)
 	})
 }
 
