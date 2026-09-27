@@ -20,16 +20,34 @@ type CodesConfig struct {
 	ResendCooldown time.Duration
 }
 
-// OneTimeCodes emite y valida códigos de 6 dígitos para cualquier finalidad
-// (verificación de correo, recuperación de contraseña, dos pasos).
+// OneTimeCodes emite, envía y valida códigos de 6 dígitos para cualquier finalidad
+// (verificación de correo, recuperación de contraseña, dos pasos). El sujeto es siempre
+// el ID del usuario.
 type OneTimeCodes struct {
 	store  port.CodeStore
+	mailer port.Mailer
 	secret []byte
 	cfg    CodesConfig
 }
 
-func NewOneTimeCodes(store port.CodeStore, secret string, cfg CodesConfig) *OneTimeCodes {
-	return &OneTimeCodes{store: store, secret: []byte(secret), cfg: cfg}
+func NewOneTimeCodes(store port.CodeStore, mailer port.Mailer, secret string, cfg CodesConfig) *OneTimeCodes {
+	return &OneTimeCodes{store: store, mailer: mailer, secret: []byte(secret), cfg: cfg}
+}
+
+// Send genera un código para el usuario y se lo envía por correo.
+func (c *OneTimeCodes) Send(ctx context.Context, purpose domain.CodePurpose, user domain.User) error {
+	if user.Email == "" {
+		return domain.ErrInvalidEmail
+	}
+	code, err := c.Issue(ctx, purpose, user.ID)
+	if err != nil {
+		return err
+	}
+	email := port.CodeEmail{Purpose: purpose, To: user.Email, Name: user.Name, Code: code, ValidFor: c.cfg.TTL}
+	if err := c.mailer.SendCode(ctx, email); err != nil {
+		return fmt.Errorf("código %s: enviar: %w", purpose, err)
+	}
+	return nil
 }
 
 // Issue genera un código nuevo (invalida el anterior) respetando la espera entre envíos.
@@ -59,8 +77,6 @@ func (c *OneTimeCodes) Verify(ctx context.Context, purpose domain.CodePurpose, s
 	}
 	return c.store.Consume(ctx, purpose, subject, c.hash(purpose, subject, code))
 }
-
-func (c *OneTimeCodes) ValidFor() time.Duration { return c.cfg.TTL }
 
 // hash firma el código con HMAC-SHA256 y la clave del servidor: con un volcado de Redis
 // no se pueden probar el millón de combinaciones sin conocer la clave.
