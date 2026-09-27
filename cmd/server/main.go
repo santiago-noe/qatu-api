@@ -19,6 +19,7 @@ import (
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/breachedlist"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/postgres"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/smtp"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/system"
 	"github.com/santiago-noe/qatu-api/internal/config"
 	"github.com/santiago-noe/qatu-api/internal/core/service"
@@ -67,8 +68,19 @@ func run() error {
 	health := service.NewHealthService(healthTimeout, db, cache)
 	sessions := service.NewSessionService(redisclient.NewSessionStore(cache.RDB, redisPrefix), clock,
 		service.SessionConfig{TTL: cfg.Session.TTL, RenewAfter: cfg.Session.RenewAfter})
-	auth, err := service.NewAuthService(accounts, accounts, argon2.New(argon2.DefaultParams), breached, sessions,
-		clock, system.UUIDGenerator{}, service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion})
+	codes := service.NewOneTimeCodes(redisclient.NewCodeStore(cache.RDB, redisPrefix), cfg.Security.CodeSecret,
+		service.CodesConfig{TTL: cfg.Codes.TTL, MaxAttempts: cfg.Codes.MaxAttempts, ResendCooldown: cfg.Codes.ResendCooldown})
+	mailer, err := smtp.New(smtp.Config{Host: cfg.SMTP.Host, Port: cfg.SMTP.Port, Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password, From: cfg.SMTP.From})
+	if err != nil {
+		return err
+	}
+	verification := service.NewEmailVerificationService(accounts, codes, mailer, clock)
+	auth, err := service.NewAuthService(service.AuthDeps{
+		Accounts: accounts, Audit: accounts, Hasher: argon2.New(argon2.DefaultParams), Breached: breached,
+		Sessions: sessions, Verification: verification, Clock: clock, IDs: system.UUIDGenerator{},
+		Legal: service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion},
+	})
 	if err != nil {
 		return err
 	}
@@ -78,6 +90,7 @@ func run() error {
 		apihttp.Handlers{
 			Health: handler.NewHealthHandler(health),
 			Auth:   handler.NewAuthHandler(auth),
+			Email:  handler.NewEmailVerificationHandler(verification),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
