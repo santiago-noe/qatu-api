@@ -65,18 +65,25 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, a port.NewAccount
 }
 
 func (r *AccountRepository) FindIdentity(ctx context.Context, provider domain.AuthProvider, subject string) (domain.AuthIdentity, error) {
+	return r.findIdentityWhere(ctx, "provider = $1 AND provider_subject = $2", provider, subject)
+}
+
+func (r *AccountRepository) FindUserIdentity(ctx context.Context, userID string, provider domain.AuthProvider) (domain.AuthIdentity, error) {
+	return r.findIdentityWhere(ctx, "user_id = $1 AND provider = $2", userID, provider)
+}
+
+// findIdentityWhere es la única consulta de identidades; cambia solo el filtro.
+func (r *AccountRepository) findIdentityWhere(ctx context.Context, where string, args ...any) (domain.AuthIdentity, error) {
 	var id domain.AuthIdentity
 	var secret *string
 	err := r.db.Pool.QueryRow(ctx, `
 		SELECT id, user_id, provider, provider_subject, secret_hash, created_at, last_used_at
-		FROM auth_identities WHERE provider = $1 AND provider_subject = $2`,
-		provider, subject).Scan(&id.ID, &id.UserID, &id.Provider, &id.ProviderSubject, &secret, &id.CreatedAt, &id.LastUsedAt)
+		FROM auth_identities WHERE `+where, args...).
+		Scan(&id.ID, &id.UserID, &id.Provider, &id.ProviderSubject, &secret, &id.CreatedAt, &id.LastUsedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.AuthIdentity{}, domain.ErrNotFound
 	}
-	if secret != nil {
-		id.SecretHash = *secret
-	}
+	id.SecretHash = deref(secret)
 	return id, err
 }
 
@@ -140,6 +147,20 @@ func (r *AccountRepository) MarkEmailVerified(ctx context.Context, userID string
 		}
 		if tag.RowsAffected() == 0 {
 			return domain.ErrEmailAlreadyVerified
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+}
+
+// UpdateName cambia el nombre (sube la versión) y audita en una transacción.
+func (r *AccountRepository) UpdateName(ctx context.Context, userID, name string, audit domain.AuditEntry) error {
+	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE users SET name = $2, version = version + 1 WHERE id = $1`, userID, name)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrNotFound
 		}
 		return insertAudit(ctx, tx, audit)
 	})
