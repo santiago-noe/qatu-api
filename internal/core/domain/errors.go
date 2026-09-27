@@ -17,4 +17,6 @@ var (
 	ErrAccountSuspended   = errors.New("la cuenta está suspendida")
 	ErrAccountDeleted     = errors.New("la cuenta fue eliminada")
 	ErrNotFound           = errors.New("no encontrado")
+	ErrSessionInvalid     = errors.New("sesión inválida o vencida")
+	ErrForbidden          = errors.New("no tienes permiso para esta acción")
 )

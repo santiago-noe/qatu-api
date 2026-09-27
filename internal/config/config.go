@@ -15,11 +15,19 @@ type Config struct {
 	HTTP     HTTPConfig     `mapstructure:"http"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Redis    RedisConfig    `mapstructure:"redis"`
+	Session  SessionConfig  `mapstructure:"session"`
 }
 
 type HTTPConfig struct {
 	Port            int           `mapstructure:"port"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+// SessionConfig: 30 días renovables (decisión de clarify de la feature 001).
+type SessionConfig struct {
+	CookieName string        `mapstructure:"cookie_name"`
+	TTL        time.Duration `mapstructure:"ttl"`
+	RenewAfter time.Duration `mapstructure:"renew_after"`
 }
 
 type DatabaseConfig struct {
@@ -41,6 +49,9 @@ var defaults = map[string]any{
 	"redis.addr":            "localhost:6379",
 	"redis.password":        "",
 	"redis.db":              0,
+	"session.cookie_name":   "qatu_session",
+	"session.ttl":           "720h",
+	"session.renew_after":   "24h",
 }
 
 func Load() (Config, error) {

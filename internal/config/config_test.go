@@ -13,6 +13,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.HTTP.Port != 8080 || cfg.HTTP.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("defaults inesperados: %+v", cfg.HTTP)
 	}
+	if cfg.Session.TTL != 30*24*time.Hour || cfg.Session.RenewAfter != 24*time.Hour || cfg.Session.CookieName != "qatu_session" {
+		t.Fatalf("sesión inesperada: %+v", cfg.Session)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {

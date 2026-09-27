@@ -2,7 +2,7 @@
 -include .env
 export
 
-.PHONY: run dev migrate-up migrate-down migrate-version test lint build
+.PHONY: run dev migrate-up migrate-down migrate-version test test-integration lint build
 run:
 	go run ./cmd/server
 dev:
@@ -15,6 +15,9 @@ migrate-version:
 	go run ./cmd/migrations version
 test:
 	go test ./...
+# Requiere docker compose up (Redis en localhost:6379).
+test-integration:
+	QATU_TEST_REDIS_ADDR=localhost:6379 go test -count=1 ./...
 lint:
 	go vet ./...
 build:
