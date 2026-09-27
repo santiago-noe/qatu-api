@@ -60,18 +60,32 @@ func TestSessionStoreRoundTrip(t *testing.T) {
 	}
 
 	later := s.ExpiresAt.Add(2 * time.Hour)
-	if err := store.Extend(ctx, "s1", time.Now(), later); err != nil {
+	renew := func(x *domain.Session) { x.ExpiresAt = later }
+	if _, err := store.Update(ctx, "s1", renew); err != nil {
 		t.Fatal(err)
 	}
 	if ttl := rdb.TTL(ctx, store.sessionKey("s1")).Val(); ttl <= time.Hour {
-		t.Fatalf("Extend debe alargar el TTL, quedó %v", ttl)
+		t.Fatalf("renovar debe alargar el TTL, quedó %v", ttl)
+	}
+
+	// Un cambio posterior conserva lo anterior y no acorta el vencimiento.
+	now := time.Now().UTC().Truncate(time.Second)
+	got, err = store.Update(ctx, "s1", func(x *domain.Session) { x.TwoFactorAt = &now })
+	if err != nil || got.TwoFactorAt == nil || !got.ExpiresAt.Equal(later) {
+		t.Fatalf("Update = %+v, %v", got, err)
+	}
+	if again, _ := store.Get(ctx, "s1"); again.TwoFactorAt == nil {
+		t.Fatal("la marca del segundo paso debe quedar guardada")
 	}
 
 	if _, err := store.Get(ctx, "no-existe"); !errors.Is(err, domain.ErrSessionInvalid) {
 		t.Fatalf("una sesión inexistente es inválida, llegó %v", err)
 	}
-	if err := store.Extend(ctx, "no-existe", time.Now(), later); !errors.Is(err, domain.ErrSessionInvalid) {
-		t.Fatalf("no se extiende una sesión cerrada, llegó %v", err)
+	if _, err := store.Update(ctx, "no-existe", renew); !errors.Is(err, domain.ErrSessionInvalid) {
+		t.Fatalf("no se modifica una sesión cerrada, llegó %v", err)
+	}
+	if n := rdb.Exists(ctx, store.sessionKey("no-existe")).Val(); n != 0 {
+		t.Fatal("Update no debe crear la sesión")
 	}
 }
 
