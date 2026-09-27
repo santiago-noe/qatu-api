@@ -30,8 +30,8 @@ type verifyEmailRequest struct {
 // POST /api/v1/auth/email/verify (requiere sesión)
 func (h *EmailVerificationHandler) Verify(c fiber.Ctx) error {
 	var req verifyEmailRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return badRequest("El cuerpo debe ser JSON válido.")
+	if err := bindJSON(c, &req); err != nil {
+		return err
 	}
 	session, _ := middleware.SessionFrom(c)
 	user, err := h.verifier.Verify(c.Context(), session, req.Code, c.IP())

@@ -84,8 +84,8 @@ func sessionMeta(c fiber.Ctx) domain.SessionMeta {
 // POST /api/v1/auth/register
 func (h *AuthHandler) Register(c fiber.Ctx) error {
 	var req registerRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return badRequest("El cuerpo debe ser JSON válido.")
+	if err := bindJSON(c, &req); err != nil {
+		return err
 	}
 	res, err := h.auth.Register(c.Context(), service.RegisterInput{
 		Email: req.Email, Name: req.Name, Password: req.Password,
@@ -102,8 +102,8 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 // POST /api/v1/auth/login
 func (h *AuthHandler) Login(c fiber.Ctx) error {
 	var req loginRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return badRequest("El cuerpo debe ser JSON válido.")
+	if err := bindJSON(c, &req); err != nil {
+		return err
 	}
 	res, err := h.auth.Login(c.Context(), req.Email, req.Password, sessionMeta(c))
 	if err != nil {
