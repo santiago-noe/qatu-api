@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"math"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -43,6 +45,8 @@ var domainErrors = []struct {
 	{domain.ErrCodeInvalid, fiber.StatusUnprocessableEntity, "codigo_invalido"},
 	{domain.ErrCodeExhausted, fiber.StatusUnprocessableEntity, "codigo_agotado"},
 	{domain.ErrEmailAlreadyVerified, fiber.StatusConflict, "correo_ya_verificado"},
+	// 422 y no 401: la sesión es válida; si fuera 401 el BFF pensaría que venció.
+	{domain.ErrCurrentPasswordInvalid, fiber.StatusUnprocessableEntity, "contrasena_actual_incorrecta"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
@@ -74,6 +78,10 @@ func StatusOf(err error) int { return toAPIError(err).Status }
 
 // ErrorHandler es el manejador de errores de Fiber para toda la API.
 func ErrorHandler(c fiber.Ctx, err error) error {
+	var rl *domain.RateLimitError
+	if errors.As(err, &rl) && rl.RetryAfter > 0 {
+		c.Set(fiber.HeaderRetryAfter, strconv.Itoa(int(math.Ceil(rl.RetryAfter.Seconds()))))
+	}
 	apiErr := toAPIError(err)
 	return c.Status(apiErr.Status).JSON(apiErr)
 }
