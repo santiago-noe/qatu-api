@@ -16,6 +16,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Session  SessionConfig  `mapstructure:"session"`
+	Legal    LegalConfig    `mapstructure:"legal"`
 }
 
 type HTTPConfig struct {
@@ -28,6 +29,12 @@ type SessionConfig struct {
 	CookieName string        `mapstructure:"cookie_name"`
 	TTL        time.Duration `mapstructure:"ttl"`
 	RenewAfter time.Duration `mapstructure:"renew_after"`
+}
+
+// LegalConfig: versión de los términos y la política de privacidad que se aceptan al registrarse.
+type LegalConfig struct {
+	TermsVersion   string `mapstructure:"terms_version"`
+	PrivacyVersion string `mapstructure:"privacy_version"`
 }
 
 type DatabaseConfig struct {
@@ -52,6 +59,8 @@ var defaults = map[string]any{
 	"session.cookie_name":   "qatu_session",
 	"session.ttl":           "720h",
 	"session.renew_after":   "24h",
+	"legal.terms_version":   "borrador-2026-09",
+	"legal.privacy_version": "borrador-2026-09",
 }
 
 func Load() (Config, error) {
