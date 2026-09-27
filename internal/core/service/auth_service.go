@@ -29,34 +29,43 @@ type AuthResult struct {
 	Token   string
 	Session domain.Session
 	User    domain.User
+	// VerificationSent indica si salió el correo con el código (solo en el registro).
+	VerificationSent bool
+}
+
+// VerificationSender envía el código de verificación de correo tras el registro.
+type VerificationSender interface {
+	SendCode(ctx context.Context, user domain.User) error
+}
+
+// AuthDeps agrupa las dependencias de AuthService.
+type AuthDeps struct {
+	Accounts     port.AccountRepository
+	Audit        port.AuditLog
+	Hasher       port.PasswordHasher
+	Breached     port.BreachedPasswords
+	Sessions     *SessionService
+	Verification VerificationSender
+	Clock        port.Clock
+	IDs          port.IDGenerator
+	Legal        LegalVersions
 }
 
 // AuthService implementa el proveedor de acceso "password". Google (y, en la feature 022,
 // el celular) serán servicios hermanos que terminan en el mismo SessionService.
 type AuthService struct {
-	accounts port.AccountRepository
-	audit    port.AuditLog
-	hasher   port.PasswordHasher
-	breached port.BreachedPasswords
-	sessions *SessionService
-	clock    port.Clock
-	ids      port.IDGenerator
-	legal    LegalVersions
+	AuthDeps
 	// dummyHash se verifica cuando el correo no existe, para que la respuesta tarde lo mismo
 	// y no revele qué correos están registrados.
 	dummyHash string
 }
 
-func NewAuthService(
-	accounts port.AccountRepository, audit port.AuditLog, hasher port.PasswordHasher, breached port.BreachedPasswords,
-	sessions *SessionService, clock port.Clock, ids port.IDGenerator, legal LegalVersions,
-) (*AuthService, error) {
-	dummy, err := hasher.Hash("qatu-dummy-password-for-timing")
+func NewAuthService(deps AuthDeps) (*AuthService, error) {
+	dummy, err := deps.Hasher.Hash("qatu-dummy-password-for-timing")
 	if err != nil {
 		return nil, err
 	}
-	return &AuthService{accounts: accounts, audit: audit, hasher: hasher, breached: breached,
-		sessions: sessions, clock: clock, ids: ids, legal: legal, dummyHash: dummy}, nil
+	return &AuthService{AuthDeps: deps, dummyHash: dummy}, nil
 }
 
 // Register crea la cuenta con rol cliente e inicia sesión. El correo queda sin verificar:
@@ -79,14 +88,14 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (AuthResul
 	if err := s.checkPassword(ctx, in.Password, email); err != nil {
 		return AuthResult{}, err
 	}
-	hash, err := s.hasher.Hash(in.Password)
+	hash, err := s.Hasher.Hash(in.Password)
 	if err != nil {
 		return AuthResult{}, fmt.Errorf("registro: %w", err)
 	}
 
-	now := s.clock.Now()
+	now := s.Clock.Now()
 	user := domain.User{
-		ID:              s.ids.NewID(),
+		ID:              s.IDs.NewID(),
 		Email:           email,
 		Name:            name,
 		AdultDeclaredAt: &now,
@@ -99,22 +108,28 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (AuthResul
 	account := port.NewAccount{
 		User: user,
 		Identity: domain.AuthIdentity{
-			ID: s.ids.NewID(), UserID: user.ID, Provider: domain.ProviderPassword,
+			ID: s.IDs.NewID(), UserID: user.ID, Provider: domain.ProviderPassword,
 			ProviderSubject: email, SecretHash: hash, CreatedAt: now, LastUsedAt: &now,
 		},
 		Consents: []domain.Consent{
-			{Purpose: domain.ConsentTerms, Version: s.legal.Terms, GrantedAt: now},
-			{Purpose: domain.ConsentPrivacy, Version: s.legal.Privacy, GrantedAt: now},
+			{Purpose: domain.ConsentTerms, Version: s.Legal.Terms, GrantedAt: now},
+			{Purpose: domain.ConsentPrivacy, Version: s.Legal.Privacy, GrantedAt: now},
 		},
 		Audit: domain.AuditEntry{
 			ActorID: user.ID, Action: domain.AuditUserRegistered, Entity: "user", EntityID: user.ID,
 			After: map[string]any{"provider": domain.ProviderPassword}, IP: in.Meta.IP,
 		},
 	}
-	if err := s.accounts.CreateAccount(ctx, account); err != nil {
+	if err := s.Accounts.CreateAccount(ctx, account); err != nil {
 		return AuthResult{}, err
 	}
-	return s.startSession(ctx, user, in.Meta)
+	result, err := s.startSession(ctx, user, in.Meta)
+	if err != nil {
+		return AuthResult{}, err
+	}
+	// Si el correo no sale, la cuenta ya existe: el usuario puede pedir otro código.
+	result.VerificationSent = s.Verification.SendCode(ctx, user) == nil
+	return result, nil
 }
 
 // Login valida correo y contraseña. Cualquier fallo devuelve el mismo error genérico.
@@ -123,16 +138,16 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta do
 	if err != nil {
 		return AuthResult{}, domain.ErrInvalidCredentials
 	}
-	identity, err := s.accounts.FindIdentity(ctx, domain.ProviderPassword, normalized)
+	identity, err := s.Accounts.FindIdentity(ctx, domain.ProviderPassword, normalized)
 	if errors.Is(err, domain.ErrNotFound) {
-		_, _, _ = s.hasher.Verify(password, s.dummyHash) // mismo tiempo de respuesta
+		_, _, _ = s.Hasher.Verify(password, s.dummyHash) // mismo tiempo de respuesta
 		return AuthResult{}, domain.ErrInvalidCredentials
 	}
 	if err != nil {
 		return AuthResult{}, err
 	}
 
-	match, needsRehash, err := s.hasher.Verify(password, identity.SecretHash)
+	match, needsRehash, err := s.Hasher.Verify(password, identity.SecretHash)
 	if err != nil {
 		return AuthResult{}, fmt.Errorf("login: %w", err)
 	}
@@ -140,7 +155,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta do
 		return AuthResult{}, domain.ErrInvalidCredentials
 	}
 
-	user, err := s.accounts.FindUser(ctx, identity.UserID)
+	user, err := s.Accounts.FindUser(ctx, identity.UserID)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -152,14 +167,14 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta do
 	if needsRehash {
 		s.rehash(ctx, identity, password, user.ID, meta.IP)
 	}
-	if err := s.accounts.MarkIdentityUsed(ctx, identity.ID, s.clock.Now()); err != nil {
+	if err := s.Accounts.MarkIdentityUsed(ctx, identity.ID, s.Clock.Now()); err != nil {
 		return AuthResult{}, err
 	}
 	result, err := s.startSession(ctx, user, meta)
 	if err != nil {
 		return AuthResult{}, err
 	}
-	_ = s.audit.Record(ctx, domain.AuditEntry{
+	_ = s.Audit.Record(ctx, domain.AuditEntry{
 		ActorID: user.ID, Action: domain.AuditUserLogin, Entity: "user", EntityID: user.ID,
 		After: map[string]any{"provider": domain.ProviderPassword, "session": result.Session.ID}, IP: meta.IP,
 	})
@@ -168,15 +183,15 @@ func (s *AuthService) Login(ctx context.Context, email, password string, meta do
 
 // Logout cierra la sesión actual.
 func (s *AuthService) Logout(ctx context.Context, session domain.Session) error {
-	return s.sessions.Revoke(ctx, session)
+	return s.Sessions.Revoke(ctx, session)
 }
 
 // LogoutAll cierra todas las sesiones del usuario, incluida la actual.
 func (s *AuthService) LogoutAll(ctx context.Context, session domain.Session, ip string) error {
-	if err := s.sessions.RevokeAll(ctx, session.UserID, ""); err != nil {
+	if err := s.Sessions.RevokeAll(ctx, session.UserID, ""); err != nil {
 		return err
 	}
-	_ = s.audit.Record(ctx, domain.AuditEntry{
+	_ = s.Audit.Record(ctx, domain.AuditEntry{
 		ActorID: session.UserID, Action: domain.AuditSessionsRevoked, Entity: "user", EntityID: session.UserID, IP: ip,
 	})
 	return nil
@@ -184,14 +199,14 @@ func (s *AuthService) LogoutAll(ctx context.Context, session domain.Session, ip 
 
 // Me devuelve el usuario de la sesión actual.
 func (s *AuthService) Me(ctx context.Context, session domain.Session) (domain.User, error) {
-	return s.accounts.FindUser(ctx, session.UserID)
+	return s.Accounts.FindUser(ctx, session.UserID)
 }
 
 func (s *AuthService) checkPassword(ctx context.Context, password, email string) error {
 	if err := domain.ValidatePasswordShape(password, email); err != nil {
 		return err
 	}
-	breached, err := s.breached.IsBreached(ctx, password)
+	breached, err := s.Breached.IsBreached(ctx, password)
 	if err != nil {
 		return fmt.Errorf("contraseñas filtradas: %w", err)
 	}
@@ -202,7 +217,7 @@ func (s *AuthService) checkPassword(ctx context.Context, password, email string)
 }
 
 func (s *AuthService) startSession(ctx context.Context, user domain.User, meta domain.SessionMeta) (AuthResult, error) {
-	token, session, err := s.sessions.Create(ctx, user, domain.ProviderPassword, meta)
+	token, session, err := s.Sessions.Create(ctx, user, domain.ProviderPassword, meta)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -211,11 +226,11 @@ func (s *AuthService) startSession(ctx context.Context, user domain.User, meta d
 
 // rehash actualiza hashes creados con parámetros de argon2id anteriores. Si falla, el login sigue.
 func (s *AuthService) rehash(ctx context.Context, identity domain.AuthIdentity, password, userID, ip string) {
-	hash, err := s.hasher.Hash(password)
-	if err != nil || s.accounts.UpdateIdentitySecret(ctx, identity.ID, hash) != nil {
+	hash, err := s.Hasher.Hash(password)
+	if err != nil || s.Accounts.UpdateIdentitySecret(ctx, identity.ID, hash) != nil {
 		return
 	}
-	_ = s.audit.Record(ctx, domain.AuditEntry{
+	_ = s.Audit.Record(ctx, domain.AuditEntry{
 		ActorID: userID, Action: domain.AuditPasswordRehashed, Entity: "auth_identity", EntityID: identity.ID, IP: ip,
 	})
 }
