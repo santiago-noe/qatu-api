@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es-PE">
+  <body style="margin:0;padding:24px;background:#f9fafb;font-family:Arial,Helvetica,sans-serif;color:#1f2937">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px">
+      <tr>
+        <td style="padding:24px 24px 0">
+          <p style="margin:0;font-size:22px;font-weight:bold">Qatu</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#4b5563">Alquila. Contrata. Construye.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:24px">
+          <p style="margin:0 0 12px;font-size:16px">Hola {{.Name}},</p>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.5">Usa este código para confirmar tu correo en Qatu:</p>
+          <p style="margin:0 0 16px;padding:14px 0;background:#fff1cc;border-radius:8px;text-align:center;font-size:32px;font-weight:bold;letter-spacing:8px">{{.Code}}</p>
+          <p style="margin:0 0 16px;font-size:14px;color:#4b5563">Vence en {{.ValidFor}}. No lo compartas con nadie: Qatu nunca te lo pedirá por teléfono ni por chat.</p>
+          <p style="margin:0;font-size:13px;color:#6b7280">Si no creaste una cuenta en Qatu, ignora este correo.</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
