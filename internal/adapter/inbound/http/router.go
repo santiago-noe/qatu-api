@@ -12,9 +12,10 @@ import (
 
 // Handlers agrupa los handlers de cada feature; se amplía al agregar features.
 type Handlers struct {
-	Health *handler.HealthHandler
-	Auth   *handler.AuthHandler
-	Email  *handler.EmailVerificationHandler
+	Health   *handler.HealthHandler
+	Auth     *handler.AuthHandler
+	Email    *handler.EmailVerificationHandler
+	Password *handler.PasswordResetHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -38,6 +39,8 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares) *fiber.App {
 	auth.Post("/logout-all", m.Session, h.Auth.LogoutAll)
 	auth.Post("/email/verify", m.Session, h.Email.Verify)
 	auth.Post("/email/resend", m.Session, h.Email.Resend)
+	auth.Post("/password/forgot", h.Password.Forgot)
+	auth.Post("/password/reset", h.Password.Reset)
 
 	v1.Get("/me", m.Session, h.Auth.Me)
 
