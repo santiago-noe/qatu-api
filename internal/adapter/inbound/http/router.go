@@ -7,7 +7,9 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/handler"
+	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/middleware"
 	"github.com/santiago-noe/qatu-api/internal/adapter/logging"
+	"github.com/santiago-noe/qatu-api/internal/core/domain"
 )
 
 // Handlers agrupa los handlers de cada feature; se amplía al agregar features.
@@ -17,6 +19,7 @@ type Handlers struct {
 	Email    *handler.EmailVerificationHandler
 	Password *handler.PasswordResetHandler
 	Me       *handler.MeHandler
+	Admin    *handler.AdminUserHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -64,6 +67,11 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Post("/password", h.Me.ChangePassword)
 	me.Get("/sessions", h.Me.Sessions)
 	me.Delete("/sessions/:id", h.Me.RevokeSession)
+
+	admin := v1.Group("/admin", m.Session, middleware.RequireRole(domain.RoleAdmin))
+	admin.Get("/users/:id", h.Admin.Get)
+	admin.Patch("/users/:id/roles", h.Admin.ChangeRoles)
+	admin.Patch("/users/:id/status", h.Admin.ChangeStatus)
 
 	return app
 }
