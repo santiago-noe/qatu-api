@@ -13,15 +13,30 @@ import (
 // Handlers agrupa los handlers de cada feature; se amplía al agregar features.
 type Handlers struct {
 	Health *handler.HealthHandler
+	Auth   *handler.AuthHandler
 }
 
-func NewRouter(log zerolog.Logger, h Handlers) *fiber.App {
-	app := fiber.New(fiber.Config{AppName: "qatu-api"})
+// Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
+type Middlewares struct {
+	// Session exige una sesión válida (middleware.SessionAuth).
+	Session fiber.Handler
+}
+
+func NewRouter(log zerolog.Logger, h Handlers, m Middlewares) *fiber.App {
+	app := fiber.New(fiber.Config{AppName: "qatu-api", ErrorHandler: handler.ErrorHandler})
 	app.Use(recover.New())
-	app.Use(logging.Middleware(log))
+	app.Use(logging.Middleware(log, handler.StatusOf))
 
 	v1 := app.Group("/api/v1")
 	v1.Get("/health", h.Health.Get)
+
+	auth := v1.Group("/auth")
+	auth.Post("/register", h.Auth.Register)
+	auth.Post("/login", h.Auth.Login)
+	auth.Post("/logout", m.Session, h.Auth.Logout)
+	auth.Post("/logout-all", m.Session, h.Auth.LogoutAll)
+
+	v1.Get("/me", m.Session, h.Auth.Me)
 
 	return app
 }
