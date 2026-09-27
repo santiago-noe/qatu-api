@@ -68,29 +68,33 @@ func run() error {
 	health := service.NewHealthService(healthTimeout, db, cache)
 	sessions := service.NewSessionService(redisclient.NewSessionStore(cache.RDB, redisPrefix), clock,
 		service.SessionConfig{TTL: cfg.Session.TTL, RenewAfter: cfg.Session.RenewAfter})
-	codes := service.NewOneTimeCodes(redisclient.NewCodeStore(cache.RDB, redisPrefix), cfg.Security.CodeSecret,
-		service.CodesConfig{TTL: cfg.Codes.TTL, MaxAttempts: cfg.Codes.MaxAttempts, ResendCooldown: cfg.Codes.ResendCooldown})
 	mailer, err := smtp.New(smtp.Config{Host: cfg.SMTP.Host, Port: cfg.SMTP.Port, Username: cfg.SMTP.Username,
 		Password: cfg.SMTP.Password, From: cfg.SMTP.From})
 	if err != nil {
 		return err
 	}
-	verification := service.NewEmailVerificationService(accounts, codes, mailer, clock)
-	auth, err := service.NewAuthService(service.AuthDeps{
-		Accounts: accounts, Audit: accounts, Hasher: argon2.New(argon2.DefaultParams), Breached: breached,
-		Sessions: sessions, Verification: verification, Clock: clock, IDs: system.UUIDGenerator{},
-		Legal: service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion},
-	})
+	passwords, err := service.NewPasswordPolicy(argon2.New(argon2.DefaultParams), breached)
 	if err != nil {
 		return err
 	}
+	ids := system.UUIDGenerator{}
+	codes := service.NewOneTimeCodes(redisclient.NewCodeStore(cache.RDB, redisPrefix), mailer, cfg.Security.CodeSecret,
+		service.CodesConfig{TTL: cfg.Codes.TTL, MaxAttempts: cfg.Codes.MaxAttempts, ResendCooldown: cfg.Codes.ResendCooldown})
+	verification := service.NewEmailVerificationService(accounts, codes, clock)
+	passwordReset := service.NewPasswordResetService(accounts, codes, passwords, sessions, clock, ids)
+	auth := service.NewAuthService(service.AuthDeps{
+		Accounts: accounts, Audit: accounts, Passwords: passwords, Sessions: sessions,
+		Verification: verification, Clock: clock, IDs: ids,
+		Legal: service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion},
+	})
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
 		apihttp.Handlers{
-			Health: handler.NewHealthHandler(health),
-			Auth:   handler.NewAuthHandler(auth),
-			Email:  handler.NewEmailVerificationHandler(verification),
+			Health:   handler.NewHealthHandler(health),
+			Auth:     handler.NewAuthHandler(auth),
+			Email:    handler.NewEmailVerificationHandler(verification),
+			Password: handler.NewPasswordResetHandler(passwordReset),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
