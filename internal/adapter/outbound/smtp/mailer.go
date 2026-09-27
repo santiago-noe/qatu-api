@@ -21,6 +21,9 @@ import (
 	"strings"
 	texttemplate "text/template"
 	"time"
+
+	"github.com/santiago-noe/qatu-api/internal/core/domain"
+	"github.com/santiago-noe/qatu-api/internal/core/port"
 )
 
 //go:embed templates/*
@@ -60,10 +63,37 @@ func New(cfg Config) (*Mailer, error) {
 	return &Mailer{cfg: cfg, from: from, html: html, text: text}, nil
 }
 
-// SendEmailVerification implementa port.Mailer.
-func (m *Mailer) SendEmailVerification(ctx context.Context, to, name, code string, validFor time.Duration) error {
-	data := map[string]string{"Name": name, "Code": code, "ValidFor": humanDuration(validFor)}
-	return m.send(ctx, to, "Tu código de verificación de Qatu: "+code, "email_verification", data)
+// codeTexts: una sola plantilla ("code") y el texto que cambia según la finalidad.
+// Agregar una finalidad nueva es agregar una fila aquí, sin otra plantilla.
+var codeTexts = map[domain.CodePurpose]struct{ Subject, Intro, Ignore string }{
+	domain.CodeEmailVerification: {
+		Subject: "Tu código de verificación de Qatu",
+		Intro:   "Usa este código para confirmar tu correo en Qatu:",
+		Ignore:  "Si no creaste una cuenta en Qatu, ignora este correo.",
+	},
+	domain.CodePasswordReset: {
+		Subject: "Tu código para recuperar tu contraseña de Qatu",
+		Intro:   "Usa este código para crear una nueva contraseña en Qatu:",
+		Ignore:  "Si no pediste recuperar tu contraseña, ignora este correo: tu cuenta sigue segura.",
+	},
+	domain.CodeTwoFactor: {
+		Subject: "Tu código de acceso a Qatu",
+		Intro:   "Usa este código para terminar de iniciar sesión en Qatu:",
+		Ignore:  "Si no intentaste iniciar sesión, cambia tu contraseña cuanto antes.",
+	},
+}
+
+// SendCode implementa port.Mailer.
+func (m *Mailer) SendCode(ctx context.Context, e port.CodeEmail) error {
+	texts, ok := codeTexts[e.Purpose]
+	if !ok {
+		return fmt.Errorf("smtp: finalidad de código desconocida: %s", e.Purpose)
+	}
+	data := map[string]string{
+		"Name": e.Name, "Code": e.Code, "ValidFor": humanDuration(e.ValidFor),
+		"Intro": texts.Intro, "Ignore": texts.Ignore,
+	}
+	return m.send(ctx, e.To, texts.Subject+": "+e.Code, "code", data)
 }
 
 func (m *Mailer) send(ctx context.Context, to, subject, template string, data any) error {
