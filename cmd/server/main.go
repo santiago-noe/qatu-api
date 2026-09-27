@@ -13,14 +13,21 @@ import (
 
 	apihttp "github.com/santiago-noe/qatu-api/internal/adapter/inbound/http"
 	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/handler"
+	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/middleware"
 	"github.com/santiago-noe/qatu-api/internal/adapter/logging"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/argon2"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/breachedlist"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/postgres"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/system"
 	"github.com/santiago-noe/qatu-api/internal/config"
 	"github.com/santiago-noe/qatu-api/internal/core/service"
 )
 
-const healthTimeout = 2 * time.Second
+const (
+	healthTimeout = 2 * time.Second
+	redisPrefix   = "qatu:"
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -49,11 +56,33 @@ func run() error {
 	cache := redisclient.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 	defer cache.Close()
 
-	// Casos de uso y adaptadores de entrada.
+	breached := breachedlist.New()
+	if err := breached.Load(); err != nil {
+		return err
+	}
+	accounts := postgres.NewAccountRepository(db)
+	clock := system.Clock{}
+
+	// Casos de uso.
 	health := service.NewHealthService(healthTimeout, db, cache)
-	app := apihttp.NewRouter(log, apihttp.Handlers{
-		Health: handler.NewHealthHandler(health),
-	})
+	sessions := service.NewSessionService(redisclient.NewSessionStore(cache.RDB, redisPrefix), clock,
+		service.SessionConfig{TTL: cfg.Session.TTL, RenewAfter: cfg.Session.RenewAfter})
+	auth, err := service.NewAuthService(accounts, accounts, argon2.New(argon2.DefaultParams), breached, sessions,
+		clock, system.UUIDGenerator{}, service.LegalVersions{Terms: cfg.Legal.TermsVersion, Privacy: cfg.Legal.PrivacyVersion})
+	if err != nil {
+		return err
+	}
+
+	// Adaptadores de entrada.
+	app := apihttp.NewRouter(log,
+		apihttp.Handlers{
+			Health: handler.NewHealthHandler(health),
+			Auth:   handler.NewAuthHandler(auth),
+		},
+		apihttp.Middlewares{
+			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
+		},
+	)
 
 	errCh := make(chan error, 1)
 	go func() {
