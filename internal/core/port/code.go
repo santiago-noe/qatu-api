@@ -18,7 +18,16 @@ type CodeStore interface {
 	AcquireCooldown(ctx context.Context, purpose domain.CodePurpose, subject string, d time.Duration) (bool, error)
 }
 
+// CodeEmail es un correo con un código de un solo uso. El texto depende de la finalidad.
+type CodeEmail struct {
+	Purpose  domain.CodePurpose
+	To       string
+	Name     string
+	Code     string
+	ValidFor time.Duration
+}
+
 // Mailer envía los correos transaccionales. Implementación: SMTP genérico.
 type Mailer interface {
-	SendEmailVerification(ctx context.Context, to, name, code string, validFor time.Duration) error
+	SendCode(ctx context.Context, email CodeEmail) error
 }
