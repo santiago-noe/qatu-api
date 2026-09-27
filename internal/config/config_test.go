@@ -18,10 +18,23 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+// productionSecrets son las variables sin valor por defecto que exige producción, en orden.
+var productionSecrets = []string{
+	"APP__SECURITY__CODE_SECRET", "APP__TURNSTILE__SECRET", "APP__GOOGLE__CLIENT_ID", "APP__GOOGLE__CLIENT_SECRET",
+}
+
+// clearSecrets aísla la prueba del .env que exporta el Makefile (una variable vacía cuenta como no definida).
+func clearSecrets(t *testing.T) {
+	for _, env := range productionSecrets {
+		t.Setenv(env, "")
+	}
+}
+
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("APP__ENV", "production")
-	t.Setenv("APP__SECURITY__CODE_SECRET", "secreto-de-prueba")
-	t.Setenv("APP__TURNSTILE__SECRET", "secreto-turnstile")
+	for _, env := range productionSecrets {
+		t.Setenv(env, "valor-de-prueba")
+	}
 	t.Setenv("APP__HTTP__PORT", "9090")
 	t.Setenv("APP__REDIS__ADDR", "redis:6379")
 
@@ -42,17 +55,30 @@ func TestLoadRejectsInvalidPort(t *testing.T) {
 }
 
 func TestProductionRequiresSecrets(t *testing.T) {
+	clearSecrets(t)
 	t.Setenv("APP__ENV", "production")
-	if _, err := Load(); err == nil {
-		t.Fatal("en producción sin APP__SECURITY__CODE_SECRET debe fallar")
+	// Se agregan de a uno: mientras falte alguno, no arranca.
+	for _, env := range productionSecrets {
+		if _, err := Load(); err == nil {
+			t.Fatalf("en producción sin %s debe fallar", env)
+		}
+		t.Setenv(env, "valor-de-prueba")
 	}
-	t.Setenv("APP__SECURITY__CODE_SECRET", "secreto-de-prueba")
-	if _, err := Load(); err == nil {
-		t.Fatal("en producción sin APP__TURNSTILE__SECRET debe fallar")
-	}
-	t.Setenv("APP__TURNSTILE__SECRET", "secreto-turnstile")
 	if _, err := Load(); err != nil {
-		t.Fatalf("con ambos secretos arranca: %v", err)
+		t.Fatalf("con todos los secretos arranca: %v", err)
+	}
+}
+
+func TestGoogleNeedsSecretWithClientID(t *testing.T) {
+	clearSecrets(t)
+	t.Setenv("APP__GOOGLE__CLIENT_ID", "id.apps.googleusercontent.com")
+	if _, err := Load(); err == nil {
+		t.Fatal("un client ID sin secreto es una configuración incompleta")
+	}
+	t.Setenv("APP__GOOGLE__CLIENT_SECRET", "secreto")
+	cfg, err := Load()
+	if err != nil || !cfg.Google.Enabled() || cfg.Google.StateTTL != 10*time.Minute {
+		t.Fatalf("Google configurado: %+v %v", cfg.Google, err)
 	}
 }
 
