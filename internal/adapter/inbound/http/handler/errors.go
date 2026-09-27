@@ -39,6 +39,10 @@ var domainErrors = []struct {
 	{domain.ErrForbidden, fiber.StatusForbidden, "sin_permiso"},
 	{domain.ErrAccountSuspended, fiber.StatusForbidden, "cuenta_suspendida"},
 	{domain.ErrNotFound, fiber.StatusNotFound, "no_encontrado"},
+	{domain.ErrTooManyRequests, fiber.StatusTooManyRequests, "demasiados_intentos"},
+	{domain.ErrCodeInvalid, fiber.StatusUnprocessableEntity, "codigo_invalido"},
+	{domain.ErrCodeExhausted, fiber.StatusUnprocessableEntity, "codigo_agotado"},
+	{domain.ErrEmailAlreadyVerified, fiber.StatusConflict, "correo_ya_verificado"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
