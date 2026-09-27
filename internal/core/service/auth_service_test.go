@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -112,6 +113,34 @@ func (m *memoryAccounts) UpdateName(_ context.Context, userID, name string, audi
 	u.Name = name
 	m.users[userID] = u
 	m.audits = append(m.audits, audit)
+	return nil
+}
+
+func (m *memoryAccounts) ChangeRoles(_ context.Context, c port.RoleChange) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[c.UserID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	roles := slices.DeleteFunc(slices.Concat(u.Roles, c.Add), func(r domain.Role) bool { return slices.Contains(c.Remove, r) })
+	slices.Sort(roles)
+	u.Roles = roles
+	m.users[c.UserID] = u
+	m.audits = append(m.audits, c.Audit)
+	return nil
+}
+
+func (m *memoryAccounts) ChangeStatus(_ context.Context, c port.StatusChange) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[c.UserID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	u.Status, u.SuspendedReason = c.Status, c.Reason
+	m.users[c.UserID] = u
+	m.audits = append(m.audits, c.Audit)
 	return nil
 }
 
