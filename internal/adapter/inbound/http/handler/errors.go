@@ -55,6 +55,14 @@ var domainErrors = []struct {
 	{domain.ErrTwoFactorNotPending, fiber.StatusConflict, "dos_pasos_no_pendiente"},
 	{domain.ErrHumanCheckFailed, fiber.StatusForbidden, "captcha_invalido"},
 	{domain.ErrHumanCheckUnavailable, fiber.StatusServiceUnavailable, "captcha_no_disponible"},
+	{domain.ErrOAuthUnavailable, fiber.StatusServiceUnavailable, "google_no_disponible"},
+	{domain.ErrOAuthState, fiber.StatusBadRequest, "google_estado_invalido"},
+	{domain.ErrOAuthFailed, fiber.StatusUnauthorized, "google_fallido"},
+	{domain.ErrOAuthEmailUnverified, fiber.StatusUnprocessableEntity, "google_correo_no_verificado"},
+	{domain.ErrOAuthLinkNeedsPassword, fiber.StatusConflict, "vincular_con_contrasena"},
+	{domain.ErrOAuthSignupRequired, fiber.StatusConflict, "registro_requerido"},
+	{domain.ErrOAuthAlreadyLinked, fiber.StatusConflict, "google_ya_vinculado"},
+	{domain.ErrAccountDeleted, fiber.StatusForbidden, "cuenta_eliminada"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
