@@ -30,4 +30,6 @@ var (
 	ErrInvalidStatus          = errors.New("estado de cuenta inválido")
 	ErrTwoFactorRequired      = errors.New("confirma el código que enviamos a tu correo para continuar")
 	ErrTwoFactorNotPending    = errors.New("esta sesión no necesita verificación en dos pasos")
+	ErrHumanCheckFailed       = errors.New("no pudimos confirmar que eres una persona, inténtalo de nuevo")
+	ErrHumanCheckUnavailable  = errors.New("la verificación de seguridad no está disponible, inténtalo en unos minutos")
 )
