@@ -14,7 +14,7 @@ import (
 type memorySessions struct {
 	mu       sync.Mutex
 	sessions map[string]domain.Session
-	extends  int
+	updates  int
 }
 
 func newMemorySessions() *memorySessions {
@@ -38,17 +38,17 @@ func (m *memorySessions) Get(_ context.Context, id string) (domain.Session, erro
 	return s, nil
 }
 
-func (m *memorySessions) Extend(_ context.Context, id string, renewedAt, expiresAt time.Time) error {
+func (m *memorySessions) Update(_ context.Context, id string, change func(*domain.Session)) (domain.Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.sessions[id]
 	if !ok {
-		return domain.ErrSessionInvalid
+		return domain.Session{}, domain.ErrSessionInvalid
 	}
-	s.RenewedAt, s.ExpiresAt = renewedAt, expiresAt
+	change(&s)
 	m.sessions[id] = s
-	m.extends++
-	return nil
+	m.updates++
+	return s, nil
 }
 
 func (m *memorySessions) Delete(_ context.Context, userID, id string) error {
@@ -134,14 +134,14 @@ func TestSessionRenewsWithUse(t *testing.T) {
 	token, first, _ := svc.Create(ctx, ana, domain.ProviderPassword, domain.SessionMeta{})
 
 	clock.Advance(2 * time.Hour)
-	if _, err := svc.Authenticate(ctx, token); err != nil || store.extends != 0 {
-		t.Fatalf("antes de RenewAfter no se escribe en Redis: extends=%d err=%v", store.extends, err)
+	if _, err := svc.Authenticate(ctx, token); err != nil || store.updates != 0 {
+		t.Fatalf("antes de RenewAfter no se escribe en Redis: updates=%d err=%v", store.updates, err)
 	}
 
 	clock.Advance(25 * time.Hour)
 	renewed, err := svc.Authenticate(ctx, token)
-	if err != nil || store.extends != 1 {
-		t.Fatalf("después de RenewAfter se renueva: extends=%d err=%v", store.extends, err)
+	if err != nil || store.updates != 1 {
+		t.Fatalf("después de RenewAfter se renueva: updates=%d err=%v", store.updates, err)
 	}
 	if !renewed.ExpiresAt.After(first.ExpiresAt) {
 		t.Fatal("la renovación debe extender el vencimiento")
@@ -156,6 +156,32 @@ func TestSessionExpires(t *testing.T) {
 	clock.Advance(31 * 24 * time.Hour)
 	if _, err := svc.Authenticate(ctx, token); !errors.Is(err, domain.ErrSessionInvalid) {
 		t.Fatalf("sin uso por 31 días la sesión vence, llegó %v", err)
+	}
+}
+
+func TestSessionTwoFactorSurvivesRenewal(t *testing.T) {
+	svc, _, clock := newTestSessions()
+	ctx := context.Background()
+	staff := domain.User{ID: "u-staff", Status: domain.UserActive, Roles: []domain.Role{domain.RoleClient, domain.RoleSupport}}
+	token, session, _ := svc.Create(ctx, staff, domain.ProviderPassword, domain.SessionMeta{})
+	other, _, _ := svc.Create(ctx, staff, domain.ProviderPassword, domain.SessionMeta{})
+	if !session.NeedsTwoFactor() {
+		t.Fatal("una sesión nueva con rol interno queda pendiente")
+	}
+
+	if _, err := svc.CompleteTwoFactor(ctx, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(25 * time.Hour) // fuerza la renovación
+	renewed, err := svc.Authenticate(ctx, token)
+	if err != nil || renewed.NeedsTwoFactor() {
+		t.Fatalf("la renovación conserva el segundo paso: %+v %v", renewed, err)
+	}
+	if pending, _ := svc.Authenticate(ctx, other); !pending.NeedsTwoFactor() {
+		t.Fatal("el segundo paso es por sesión: el otro dispositivo sigue pendiente")
+	}
+	if _, err := svc.CompleteTwoFactor(ctx, "cerrada"); !errors.Is(err, domain.ErrSessionInvalid) {
+		t.Fatalf("no se marca una sesión cerrada, llegó %v", err)
 	}
 }
 
