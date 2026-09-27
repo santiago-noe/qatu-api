@@ -1,11 +1,13 @@
 services:
   db:
-    image: postgres:18-alpine
+    # Postgres 18 con PostGIS (mapa y distancias, docs/04)
+    image: postgis/postgis:18-3.6-alpine
     environment:
       POSTGRES_USER: qatu
       POSTGRES_PASSWORD: qatu
       POSTGRES_DB: qatu
-    ports: ["5432:5432"]
+    # 5433 en el equipo: el 5432 suele estar ocupado por un PostgreSQL local.
+    ports: ["5433:5432"]
     volumes: [qatu_pgdata:/var/lib/postgresql]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U qatu -d qatu"]

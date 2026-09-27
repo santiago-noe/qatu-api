@@ -37,7 +37,7 @@ var defaults = map[string]any{
 	"env":                   "development",
 	"http.port":             8080,
 	"http.shutdown_timeout": "10s",
-	"database.url":          "postgres://qatu:qatu@localhost:5432/qatu?sslmode=disable",
+	"database.url":          "postgres://qatu:qatu@localhost:5433/qatu?sslmode=disable",
 	"redis.addr":            "localhost:6379",
 	"redis.password":        "",
 	"redis.db":              0,

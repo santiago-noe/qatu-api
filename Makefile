@@ -2,7 +2,7 @@
 -include .env
 export
 
-.PHONY: run dev migrate-up migrate-down test lint build
+.PHONY: run dev migrate-up migrate-down migrate-version test lint build
 run:
 	go run ./cmd/server
 dev:
@@ -11,6 +11,8 @@ migrate-up:
 	go run ./cmd/migrations up
 migrate-down:
 	go run ./cmd/migrations down
+migrate-version:
+	go run ./cmd/migrations version
 test:
 	go test ./...
 lint:
