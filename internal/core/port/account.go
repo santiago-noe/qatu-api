@@ -25,6 +25,8 @@ type AccountRepository interface {
 	FindUser(ctx context.Context, id string) (domain.User, error)
 	MarkIdentityUsed(ctx context.Context, identityID string, at time.Time) error
 	UpdateIdentitySecret(ctx context.Context, identityID, secretHash string) error
+	// MarkEmailVerified confirma el correo y registra la auditoría en la misma transacción.
+	MarkEmailVerified(ctx context.Context, userID string, at time.Time, audit domain.AuditEntry) error
 }
 
 // AuditLog registra acciones fuera de una transacción de negocio (por ejemplo, inicios de sesión).
