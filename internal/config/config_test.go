@@ -21,6 +21,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("APP__ENV", "production")
 	t.Setenv("APP__SECURITY__CODE_SECRET", "secreto-de-prueba")
+	t.Setenv("APP__TURNSTILE__SECRET", "secreto-turnstile")
 	t.Setenv("APP__HTTP__PORT", "9090")
 	t.Setenv("APP__REDIS__ADDR", "redis:6379")
 
@@ -40,10 +41,18 @@ func TestLoadRejectsInvalidPort(t *testing.T) {
 	}
 }
 
-func TestProductionRequiresCodeSecret(t *testing.T) {
+func TestProductionRequiresSecrets(t *testing.T) {
 	t.Setenv("APP__ENV", "production")
 	if _, err := Load(); err == nil {
 		t.Fatal("en producción sin APP__SECURITY__CODE_SECRET debe fallar")
+	}
+	t.Setenv("APP__SECURITY__CODE_SECRET", "secreto-de-prueba")
+	if _, err := Load(); err == nil {
+		t.Fatal("en producción sin APP__TURNSTILE__SECRET debe fallar")
+	}
+	t.Setenv("APP__TURNSTILE__SECRET", "secreto-turnstile")
+	if _, err := Load(); err != nil {
+		t.Fatalf("con ambos secretos arranca: %v", err)
 	}
 }
 
