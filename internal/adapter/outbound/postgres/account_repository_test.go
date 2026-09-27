@@ -158,6 +158,28 @@ func TestAccountRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("identidad por usuario y cambio de nombre", func(t *testing.T) {
+		identity, err := repo.FindUserIdentity(ctx, acc.User.ID, domain.ProviderPassword)
+		if err != nil || identity.ID != acc.Identity.ID {
+			t.Fatalf("FindUserIdentity = %+v, %v", identity, err)
+		}
+		if _, err := repo.FindUserIdentity(ctx, acc.User.ID, domain.ProviderGoogle); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("sin Google debe ser ErrNotFound, llegó %v", err)
+		}
+		before, _ := repo.FindUser(ctx, acc.User.ID)
+		audit := domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditProfileUpdated, Entity: "user", EntityID: acc.User.ID}
+		if err := repo.UpdateName(ctx, acc.User.ID, "Ana María", audit); err != nil {
+			t.Fatal(err)
+		}
+		after, _ := repo.FindUser(ctx, acc.User.ID)
+		if after.Name != "Ana María" || after.Version != before.Version+1 || !after.UpdatedAt.After(before.UpdatedAt) {
+			t.Fatalf("debe cambiar el nombre, la versión y updated_at: %+v", after)
+		}
+		if err := repo.UpdateName(ctx, uuid.NewString(), "X", audit); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("un usuario inexistente es ErrNotFound, llegó %v", err)
+		}
+	})
+
 	t.Run("auditoría suelta", func(t *testing.T) {
 		if err := repo.Record(ctx, domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditUserLogin,
 			Entity: "user", EntityID: acc.User.ID, After: map[string]any{"provider": "password"}}); err != nil {
