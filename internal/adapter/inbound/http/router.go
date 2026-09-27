@@ -21,6 +21,7 @@ type Handlers struct {
 	Me        *handler.MeHandler
 	Admin     *handler.AdminUserHandler
 	TwoFactor *handler.TwoFactorHandler
+	OAuth     *handler.OAuthHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -63,6 +64,8 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	auth.Post("/email/resend", m.Session, h.Email.Resend)
 	auth.Post("/password/forgot", m.RateLimit("password_forgot"), m.Human("password_forgot"), h.Password.Forgot)
 	auth.Post("/password/reset", m.RateLimit("password_reset"), h.Password.Reset)
+	auth.Post("/google/start", m.RateLimit("google"), h.OAuth.Start)
+	auth.Post("/google/callback", m.RateLimit("google"), h.OAuth.Callback)
 	auth.Post("/two-factor/send", m.Session, h.TwoFactor.Send)
 	auth.Post("/two-factor/verify", m.Session, h.TwoFactor.Verify)
 
