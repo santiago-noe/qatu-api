@@ -14,6 +14,7 @@ import (
 type Handlers struct {
 	Health *handler.HealthHandler
 	Auth   *handler.AuthHandler
+	Email  *handler.EmailVerificationHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -35,6 +36,8 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares) *fiber.App {
 	auth.Post("/login", h.Auth.Login)
 	auth.Post("/logout", m.Session, h.Auth.Logout)
 	auth.Post("/logout-all", m.Session, h.Auth.LogoutAll)
+	auth.Post("/email/verify", m.Session, h.Email.Verify)
+	auth.Post("/email/resend", m.Session, h.Email.Resend)
 
 	v1.Get("/me", m.Session, h.Auth.Me)
 
