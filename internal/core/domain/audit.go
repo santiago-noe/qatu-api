@@ -22,4 +22,6 @@ const (
 	AuditPasswordChanged  = "user.password_changed"
 	AuditProfileUpdated   = "user.profile_updated"
 	AuditSessionRevoked   = "user.session_revoked"
+	AuditRolesChanged     = "user.roles_changed"
+	AuditStatusChanged    = "user.status_changed"
 )
