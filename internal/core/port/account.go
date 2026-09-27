@@ -63,6 +63,9 @@ type AccountRepository interface {
 	UpdateName(ctx context.Context, userID, name string, audit domain.AuditEntry) error
 	ChangeRoles(ctx context.Context, change RoleChange) error
 	ChangeStatus(ctx context.Context, change StatusChange) error
+	// LinkIdentity agrega una forma de entrar (Google) a una cuenta existente y audita, en una
+	// transacción. Devuelve domain.ErrOAuthAlreadyLinked si la cuenta ya tiene ese proveedor.
+	LinkIdentity(ctx context.Context, identity domain.AuthIdentity, audit domain.AuditEntry) error
 	MarkIdentityUsed(ctx context.Context, identityID string, at time.Time) error
 	UpdateIdentitySecret(ctx context.Context, identityID, secretHash string) error
 	// MarkEmailVerified confirma el correo y registra la auditoría en la misma transacción.
