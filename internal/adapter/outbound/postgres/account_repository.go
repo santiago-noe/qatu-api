@@ -166,6 +166,56 @@ func (r *AccountRepository) UpdateName(ctx context.Context, userID, name string,
 	})
 }
 
+// ChangeRoles agrega y quita roles, sube la versión del usuario y audita en una transacción.
+func (r *AccountRepository) ChangeRoles(ctx context.Context, c port.RoleChange) error {
+	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		for _, role := range c.Add {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO user_roles (user_id, role, granted_by, granted_at) VALUES ($1, $2, NULLIF($3, '')::uuid, $4)
+				ON CONFLICT DO NOTHING`, c.UserID, role, c.GrantedBy, c.At); err != nil {
+				return err
+			}
+		}
+		if len(c.Remove) > 0 {
+			if _, err := tx.Exec(ctx, `DELETE FROM user_roles WHERE user_id = $1 AND role = ANY($2)`, c.UserID, c.Remove); err != nil {
+				return err
+			}
+		}
+		if err := bumpVersion(ctx, tx, c.UserID); err != nil {
+			return err
+		}
+		return insertAudit(ctx, tx, c.Audit)
+	})
+}
+
+// ChangeStatus cambia el estado y el motivo de suspensión y audita en una transacción.
+func (r *AccountRepository) ChangeStatus(ctx context.Context, c port.StatusChange) error {
+	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE users SET status = $2, suspended_reason = NULLIF($3, ''), version = version + 1 WHERE id = $1`,
+			c.UserID, c.Status, c.Reason)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrNotFound
+		}
+		return insertAudit(ctx, tx, c.Audit)
+	})
+}
+
+// bumpVersion sube la versión del usuario (bloqueo optimista) o devuelve ErrNotFound.
+func bumpVersion(ctx context.Context, tx pgx.Tx, userID string) error {
+	tag, err := tx.Exec(ctx, `UPDATE users SET version = version + 1 WHERE id = $1`, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // SetPassword crea la identidad "password" o reemplaza su hash, opcionalmente verifica el
 // correo y audita, todo en una transacción.
 func (r *AccountRepository) SetPassword(ctx context.Context, up port.PasswordUpdate) error {
