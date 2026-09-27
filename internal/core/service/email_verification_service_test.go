@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
+	"github.com/santiago-noe/qatu-api/internal/core/port"
 )
 
 // memoryCodes es un CodeStore en memoria con la misma semántica que el de Redis.
@@ -72,18 +73,15 @@ func (m *memoryCodes) resetCooldowns() {
 	m.cooldowns = map[string]bool{}
 }
 
-// capturingMailer guarda el último código enviado.
+// capturingMailer guarda el último código enviado y su finalidad.
 type capturingMailer struct {
 	to, code string
+	purpose  domain.CodePurpose
 	sends    int
-	fail     error
 }
 
-func (c *capturingMailer) SendEmailVerification(_ context.Context, to, _, code string, _ time.Duration) error {
-	if c.fail != nil {
-		return c.fail
-	}
-	c.to, c.code = to, code
+func (c *capturingMailer) SendCode(_ context.Context, e port.CodeEmail) error {
+	c.to, c.code, c.purpose = e.To, e.Code, e.Purpose
 	c.sends++
 	return nil
 }
@@ -105,8 +103,8 @@ func newVerificationFixture(t *testing.T) verificationFixture {
 	accounts.users[user.ID] = user
 	store := newMemoryCodes()
 	mailer := &capturingMailer{}
-	codes := NewOneTimeCodes(store, "secreto", testCodesConfig)
-	svc := NewEmailVerificationService(accounts, codes, mailer, &fakeClock{now: time.Now()})
+	codes := NewOneTimeCodes(store, mailer, "secreto", testCodesConfig)
+	svc := NewEmailVerificationService(accounts, codes, &fakeClock{now: time.Now()})
 	return verificationFixture{svc: svc, accounts: accounts, codes: store, mailer: mailer, session: domain.Session{UserID: user.ID}}
 }
 
@@ -117,7 +115,7 @@ func TestEmailVerificationHappyPath(t *testing.T) {
 	if err := f.svc.Resend(ctx, f.session); err != nil {
 		t.Fatal(err)
 	}
-	if f.mailer.to != "ana@correo.pe" || !isDigits(f.mailer.code, 6) {
+	if f.mailer.to != "ana@correo.pe" || !isDigits(f.mailer.code, 6) || f.mailer.purpose != domain.CodeEmailVerification {
 		t.Fatalf("debe enviar un código de 6 dígitos al correo: %+v", f.mailer)
 	}
 	for _, stored := range f.codes.codes {
@@ -193,7 +191,7 @@ func TestEmailVerificationResendCooldownAndNewCode(t *testing.T) {
 
 func TestCodesArePurposeBound(t *testing.T) {
 	store := newMemoryCodes()
-	codes := NewOneTimeCodes(store, "secreto", testCodesConfig)
+	codes := NewOneTimeCodes(store, &capturingMailer{}, "secreto", testCodesConfig)
 	ctx := context.Background()
 	code, _ := codes.Issue(ctx, domain.CodeEmailVerification, "u1")
 	if err := codes.Verify(ctx, domain.CodePasswordReset, "u1", code); !errors.Is(err, domain.ErrCodeInvalid) {
