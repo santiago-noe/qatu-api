@@ -23,13 +23,9 @@ func NewEmailVerificationHandler(verifier EmailVerifier) *EmailVerificationHandl
 	return &EmailVerificationHandler{verifier: verifier}
 }
 
-type verifyEmailRequest struct {
-	Code string `json:"code"`
-}
-
 // POST /api/v1/auth/email/verify (requiere sesión)
 func (h *EmailVerificationHandler) Verify(c fiber.Ctx) error {
-	var req verifyEmailRequest
+	var req codeRequest
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}
