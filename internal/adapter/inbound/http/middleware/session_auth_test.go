@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -22,16 +23,19 @@ func (s stubAuth) Authenticate(_ context.Context, token string) (domain.Session,
 const cookie = "qatu_session"
 
 func newApp() *fiber.App {
+	confirmed := time.Now()
+	admin := []domain.Role{domain.RoleClient, domain.RoleAdmin}
 	auth := stubAuth{
-		"tok-cliente": {UserID: "u1", Roles: []domain.Role{domain.RoleClient}},
-		"tok-admin":   {UserID: "u2", Roles: []domain.Role{domain.RoleClient, domain.RoleAdmin}},
+		"tok-cliente":         {UserID: "u1", Roles: []domain.Role{domain.RoleClient}},
+		"tok-admin":           {UserID: "u2", Roles: admin, TwoFactorAt: &confirmed},
+		"tok-admin-pendiente": {UserID: "u2", Roles: admin},
 	}
 	app := fiber.New()
 	app.Get("/me", SessionAuth(auth, cookie), func(c fiber.Ctx) error {
 		session, _ := SessionFrom(c)
 		return c.SendString(session.UserID)
 	})
-	app.Get("/admin", SessionAuth(auth, cookie), RequireRole(domain.RoleAdmin), func(c fiber.Ctx) error {
+	app.Get("/admin", SessionAuth(auth, cookie), RequireRole(domain.RoleAdmin), RequireTwoFactor(), func(c fiber.Ctx) error {
 		return c.SendString("ok")
 	})
 	return app
@@ -51,6 +55,8 @@ func TestSessionAuthAndRequireRole(t *testing.T) {
 		{name: "bearer válido", path: "/me", bearer: "tok-cliente", want: fiber.StatusOK},
 		{name: "rol insuficiente", path: "/admin", cookie: "tok-cliente", want: fiber.StatusForbidden},
 		{name: "rol suficiente", path: "/admin", cookie: "tok-admin", want: fiber.StatusOK},
+		{name: "admin sin segundo paso", path: "/admin", cookie: "tok-admin-pendiente", want: fiber.StatusForbidden},
+		{name: "admin sin segundo paso navega como cliente", path: "/me", cookie: "tok-admin-pendiente", want: fiber.StatusOK},
 	}
 
 	app := newApp()
