@@ -24,4 +24,8 @@ var (
 	ErrCodeExhausted          = errors.New("agotaste los intentos, pide un código nuevo")
 	ErrEmailAlreadyVerified   = errors.New("tu correo ya está verificado")
 	ErrCurrentPasswordInvalid = errors.New("la contraseña actual no es correcta")
+	ErrRoleNotAssignable      = errors.New("ese rol no lo asigna un administrador")
+	ErrSelfLockout            = errors.New("no puedes quitarte el rol de admin ni suspender tu propia cuenta")
+	ErrSuspensionReason       = errors.New("indica el motivo de la suspensión")
+	ErrInvalidStatus          = errors.New("estado de cuenta inválido")
 )
