@@ -64,6 +64,36 @@ func (m *memoryAccounts) FindUser(_ context.Context, id string) (domain.User, er
 	return u, nil
 }
 
+func (m *memoryAccounts) FindUserByEmail(_ context.Context, email string) (domain.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return domain.User{}, domain.ErrNotFound
+}
+
+func (m *memoryAccounts) SetPassword(_ context.Context, up port.PasswordUpdate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := identityKey(domain.ProviderPassword, up.Email)
+	identity, ok := m.identities[key]
+	if !ok {
+		identity = domain.AuthIdentity{ID: up.IdentityID, UserID: up.UserID, Provider: domain.ProviderPassword, ProviderSubject: up.Email}
+	}
+	identity.SecretHash = up.SecretHash
+	m.identities[key] = identity
+	if up.VerifyEmail {
+		u := m.users[up.UserID]
+		u.EmailVerifiedAt = &up.At
+		m.users[up.UserID] = u
+	}
+	m.audits = append(m.audits, up.Audit)
+	return nil
+}
+
 func (m *memoryAccounts) MarkIdentityUsed(context.Context, string, time.Time) error { return nil }
 
 func (m *memoryAccounts) UpdateIdentitySecret(_ context.Context, identityID, hash string) error {
@@ -138,14 +168,15 @@ func newAuthFixture(t *testing.T) authFixture {
 	accounts := newMemoryAccounts()
 	hasher := &plainHasher{}
 	sessions, _, clock := newTestSessions()
-	svc, err := NewAuthService(AuthDeps{
-		Accounts: accounts, Audit: accounts, Hasher: hasher, Breached: breachedSet{"1234567890": true},
-		Sessions: sessions, Verification: &recordingSender{}, Clock: clock, IDs: &seqIDs{},
-		Legal: LegalVersions{Terms: "2026-09", Privacy: "2026-09"},
-	})
+	passwords, err := NewPasswordPolicy(hasher, breachedSet{"1234567890": true})
 	if err != nil {
 		t.Fatal(err)
 	}
+	svc := NewAuthService(AuthDeps{
+		Accounts: accounts, Audit: accounts, Passwords: passwords,
+		Sessions: sessions, Verification: &recordingSender{}, Clock: clock, IDs: &seqIDs{},
+		Legal: LegalVersions{Terms: "2026-09", Privacy: "2026-09"},
+	})
 	return authFixture{svc: svc, accounts: accounts, hasher: hasher, sessions: sessions}
 }
 
