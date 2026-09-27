@@ -51,6 +51,8 @@ var domainErrors = []struct {
 	{domain.ErrSelfLockout, fiber.StatusUnprocessableEntity, "autobloqueo"},
 	{domain.ErrSuspensionReason, fiber.StatusUnprocessableEntity, "motivo_requerido"},
 	{domain.ErrInvalidStatus, fiber.StatusUnprocessableEntity, "estado_invalido"},
+	{domain.ErrTwoFactorRequired, fiber.StatusForbidden, "dos_pasos_requerido"},
+	{domain.ErrTwoFactorNotPending, fiber.StatusConflict, "dos_pasos_no_pendiente"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
