@@ -16,16 +16,32 @@ type Handlers struct {
 	Auth     *handler.AuthHandler
 	Email    *handler.EmailVerificationHandler
 	Password *handler.PasswordResetHandler
+	Me       *handler.MeHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
 type Middlewares struct {
 	// Session exige una sesión válida (middleware.SessionAuth).
 	Session fiber.Handler
+	// RateLimit limita por IP una ruta pública; name separa los contadores.
+	RateLimit func(name string) fiber.Handler
 }
 
-func NewRouter(log zerolog.Logger, h Handlers, m Middlewares) *fiber.App {
-	app := fiber.New(fiber.Config{AppName: "qatu-api", ErrorHandler: handler.ErrorHandler})
+type Options struct {
+	// TrustPrivateProxies: c.IP() toma X-Forwarded-For solo si la petición viene de una red
+	// privada o local (el BFF). Desde cualquier otra IP la cabecera se ignora.
+	TrustPrivateProxies bool
+}
+
+func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fiber.App {
+	app := fiber.New(fiber.Config{
+		AppName:            "qatu-api",
+		ErrorHandler:       handler.ErrorHandler,
+		TrustProxy:         opts.TrustPrivateProxies,
+		TrustProxyConfig:   fiber.TrustProxyConfig{Loopback: true, Private: true},
+		ProxyHeader:        fiber.HeaderXForwardedFor,
+		EnableIPValidation: true,
+	})
 	app.Use(recover.New())
 	app.Use(logging.Middleware(log, handler.StatusOf))
 
@@ -33,16 +49,21 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares) *fiber.App {
 	v1.Get("/health", h.Health.Get)
 
 	auth := v1.Group("/auth")
-	auth.Post("/register", h.Auth.Register)
-	auth.Post("/login", h.Auth.Login)
+	auth.Post("/register", m.RateLimit("register"), h.Auth.Register)
+	auth.Post("/login", m.RateLimit("login"), h.Auth.Login)
 	auth.Post("/logout", m.Session, h.Auth.Logout)
 	auth.Post("/logout-all", m.Session, h.Auth.LogoutAll)
 	auth.Post("/email/verify", m.Session, h.Email.Verify)
 	auth.Post("/email/resend", m.Session, h.Email.Resend)
-	auth.Post("/password/forgot", h.Password.Forgot)
-	auth.Post("/password/reset", h.Password.Reset)
+	auth.Post("/password/forgot", m.RateLimit("password_forgot"), h.Password.Forgot)
+	auth.Post("/password/reset", m.RateLimit("password_reset"), h.Password.Reset)
 
-	v1.Get("/me", m.Session, h.Auth.Me)
+	me := v1.Group("/me", m.Session)
+	me.Get("/", h.Me.Get)
+	me.Patch("/", h.Me.Update)
+	me.Post("/password", h.Me.ChangePassword)
+	me.Get("/sessions", h.Me.Sessions)
+	me.Delete("/sessions/:id", h.Me.RevokeSession)
 
 	return app
 }
