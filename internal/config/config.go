@@ -11,16 +11,24 @@ import (
 )
 
 type Config struct {
-	Env      string         `mapstructure:"env"`
-	HTTP     HTTPConfig     `mapstructure:"http"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Session  SessionConfig  `mapstructure:"session"`
-	Legal    LegalConfig    `mapstructure:"legal"`
-	SMTP     SMTPConfig     `mapstructure:"smtp"`
-	Security SecurityConfig `mapstructure:"security"`
-	Codes    CodesConfig    `mapstructure:"codes"`
-	Limits   LimitsConfig   `mapstructure:"ratelimit"`
+	Env       string          `mapstructure:"env"`
+	HTTP      HTTPConfig      `mapstructure:"http"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	Redis     RedisConfig     `mapstructure:"redis"`
+	Session   SessionConfig   `mapstructure:"session"`
+	Legal     LegalConfig     `mapstructure:"legal"`
+	SMTP      SMTPConfig      `mapstructure:"smtp"`
+	Security  SecurityConfig  `mapstructure:"security"`
+	Codes     CodesConfig     `mapstructure:"codes"`
+	Limits    LimitsConfig    `mapstructure:"ratelimit"`
+	Turnstile TurnstileConfig `mapstructure:"turnstile"`
+}
+
+// TurnstileConfig: captcha de Cloudflare en formularios públicos. Sin secreto (solo en
+// desarrollo) la verificación queda desactivada; las claves de prueba de Cloudflare sirven
+// para probarla de verdad en local.
+type TurnstileConfig struct {
+	Secret string `mapstructure:"secret"`
 }
 
 type HTTPConfig struct {
@@ -119,6 +127,7 @@ var defaults = map[string]any{
 	"codes.ttl":                          "15m",
 	"codes.max_attempts":                 5,
 	"codes.resend_cooldown":              "1m",
+	"turnstile.secret":                   "",
 }
 
 func Load() (Config, error) {
@@ -135,10 +144,18 @@ func Load() (Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
-	if cfg.Security.CodeSecret == "" {
-		if cfg.IsProduction() {
-			return Config{}, fmt.Errorf("config: APP__SECURITY__CODE_SECRET es obligatorio en producción")
+	if cfg.IsProduction() {
+		// Secretos sin valor por defecto: en producción su ausencia es un error de despliegue.
+		for _, s := range []struct{ env, value string }{
+			{"APP__SECURITY__CODE_SECRET", cfg.Security.CodeSecret},
+			{"APP__TURNSTILE__SECRET", cfg.Turnstile.Secret},
+		} {
+			if s.value == "" {
+				return Config{}, fmt.Errorf("config: %s es obligatorio en producción", s.env)
+			}
 		}
+	}
+	if cfg.Security.CodeSecret == "" {
 		cfg.Security.CodeSecret = devCodeSecret
 	}
 	if cfg.HTTP.Port <= 0 {
