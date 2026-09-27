@@ -19,4 +19,7 @@ const (
 	AuditPasswordRehashed = "user.password_rehashed"
 	AuditEmailVerified    = "user.email_verified"
 	AuditPasswordReset    = "user.password_reset"
+	AuditPasswordChanged  = "user.password_changed"
+	AuditProfileUpdated   = "user.profile_updated"
+	AuditSessionRevoked   = "user.session_revoked"
 )
