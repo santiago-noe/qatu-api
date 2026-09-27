@@ -21,8 +21,10 @@ import (
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/smtp"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/system"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/turnstile"
 	"github.com/santiago-noe/qatu-api/internal/config"
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
+	"github.com/santiago-noe/qatu-api/internal/core/port"
 	"github.com/santiago-noe/qatu-api/internal/core/service"
 )
 
@@ -64,6 +66,12 @@ func run() error {
 	}
 	accounts := postgres.NewAccountRepository(db)
 	clock := system.Clock{}
+
+	var human port.HumanVerifier = turnstile.New(cfg.Turnstile.Secret)
+	if cfg.Turnstile.Secret == "" { // solo en desarrollo: config.Load lo exige en producción
+		log.Warn().Msg("APP__TURNSTILE__SECRET vacío: captcha desactivado")
+		human = turnstile.Disabled{}
+	}
 
 	// Casos de uso.
 	health := service.NewHealthService(healthTimeout, db, cache)
@@ -115,6 +123,7 @@ func run() error {
 			RateLimit: func(name string) fiber.Handler {
 				return middleware.RateLimitByIP(limiter, name, toLimit(cfg.Limits.AuthPerIP))
 			},
+			Human: func(action string) fiber.Handler { return middleware.RequireHuman(human, action) },
 		},
 		apihttp.Options{TrustPrivateProxies: cfg.HTTP.TrustPrivateProxies},
 	)
