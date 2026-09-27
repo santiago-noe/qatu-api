@@ -18,4 +18,5 @@ const (
 	AuditSessionsRevoked  = "user.sessions_revoked"
 	AuditPasswordRehashed = "user.password_rehashed"
 	AuditEmailVerified    = "user.email_verified"
+	AuditPasswordReset    = "user.password_reset"
 )
