@@ -51,33 +51,59 @@ func (s *SessionStore) Get(ctx context.Context, id string) (domain.Session, erro
 	if err != nil {
 		return domain.Session{}, err
 	}
+	return decodeSession(data)
+}
+
+// updateRetries: intentos si otra petición modificó la sesión entre la lectura y la escritura.
+const updateRetries = 3
+
+// Update lee, modifica y escribe con WATCH: si otra petición cambia o cierra la sesión en
+// medio, la transacción se descarta y se reintenta sobre el valor nuevo. Así una renovación
+// no borra la marca del segundo paso ni revive una sesión cerrada.
+func (s *SessionStore) Update(ctx context.Context, id string, change func(*domain.Session)) (domain.Session, error) {
+	key := s.sessionKey(id)
+	var session domain.Session
+	update := func(tx *redis.Tx) error {
+		data, err := tx.Get(ctx, key).Bytes()
+		if errors.Is(err, redis.Nil) {
+			return domain.ErrSessionInvalid
+		}
+		if err != nil {
+			return err
+		}
+		if session, err = decodeSession(data); err != nil {
+			return err
+		}
+		change(&session)
+		if data, err = json.Marshal(session); err != nil {
+			return err
+		}
+		_, err = tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
+			p.SetArgs(ctx, key, data, redis.SetArgs{ExpireAt: session.ExpiresAt})
+			// GT: el set de sesiones del usuario vive lo que su sesión más larga; nunca se acorta.
+			p.ExpireGT(ctx, s.userKey(session.UserID), time.Until(session.ExpiresAt))
+			return nil
+		})
+		return err
+	}
+	for range updateRetries {
+		err := s.rdb.Watch(ctx, update, key)
+		if !errors.Is(err, redis.TxFailedErr) {
+			if err != nil {
+				return domain.Session{}, err
+			}
+			return session, nil
+		}
+	}
+	return domain.Session{}, fmt.Errorf("sesión: demasiados cambios simultáneos")
+}
+
+func decodeSession(data []byte) (domain.Session, error) {
 	var session domain.Session
 	if err := json.Unmarshal(data, &session); err != nil {
 		return domain.Session{}, fmt.Errorf("sesión corrupta: %w", err)
 	}
 	return session, nil
-}
-
-func (s *SessionStore) Extend(ctx context.Context, id string, renewedAt, expiresAt time.Time) error {
-	session, err := s.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	session.RenewedAt, session.ExpiresAt = renewedAt, expiresAt
-	data, err := json.Marshal(session)
-	if err != nil {
-		return err
-	}
-	_, err = s.rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
-		// XX: solo si sigue existiendo (no revive una sesión cerrada mientras tanto).
-		p.SetArgs(ctx, s.sessionKey(id), data, redis.SetArgs{Mode: "XX", ExpireAt: expiresAt})
-		p.ExpireAt(ctx, s.userKey(session.UserID), expiresAt)
-		return nil
-	})
-	if errors.Is(err, redis.Nil) {
-		return domain.ErrSessionInvalid
-	}
-	return err
 }
 
 // Delete solo borra si la sesión es del usuario: nadie cierra sesiones ajenas por ID.
@@ -141,8 +167,8 @@ func (s *SessionStore) ListForUser(ctx context.Context, userID string) ([]domain
 			stale = append(stale, ids[i])
 			continue
 		}
-		var session domain.Session
-		if err := json.Unmarshal([]byte(raw), &session); err != nil {
+		session, err := decodeSession([]byte(raw))
+		if err != nil {
 			stale = append(stale, ids[i])
 			continue
 		}
