@@ -16,7 +16,7 @@ type AdminUsers interface {
 	ChangeStatus(ctx context.Context, actorID, userID string, status domain.UserStatus, reason, ip string) (domain.User, error)
 }
 
-// AdminUserHandler atiende /api/v1/admin/users. Las rutas exigen sesión y rol admin.
+// AdminUserHandler atiende /api/v1/admin/users. Las rutas exigen sesión, rol admin y segundo paso.
 type AdminUserHandler struct {
 	admin AdminUsers
 }
