@@ -18,9 +18,15 @@ type Session struct {
 	RenewedAt time.Time    `json:"renewed_at"`
 	IP        string       `json:"ip,omitempty"`
 	UserAgent string       `json:"user_agent,omitempty"`
+	// TwoFactorAt: cuándo la sesión confirmó el segundo paso (solo cuenta con roles internos).
+	TwoFactorAt *time.Time `json:"two_factor_at,omitempty"`
 }
 
 func (s Session) IsExpired(now time.Time) bool { return !now.Before(s.ExpiresAt) }
+
+// NeedsTwoFactor: la sesión tiene roles internos y aún no confirmó el código. Mientras tanto
+// navega como cliente, pero las rutas internas la rechazan.
+func (s Session) NeedsTwoFactor() bool { return s.TwoFactorAt == nil && hasInternalRole(s.Roles) }
 
 func (s Session) HasAnyRole(roles ...Role) bool {
 	return slices.ContainsFunc(roles, func(r Role) bool { return slices.Contains(s.Roles, r) })
