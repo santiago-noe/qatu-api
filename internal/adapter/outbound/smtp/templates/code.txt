@@ -1,11 +1,11 @@
 Hola {{.Name}},
 
-Usa este código para confirmar tu correo en Qatu:
+{{.Intro}}
 
     {{.Code}}
 
 Vence en {{.ValidFor}}. No lo compartas con nadie: Qatu nunca te lo pedirá por teléfono ni por chat.
 
-Si no creaste una cuenta en Qatu, ignora este correo.
+{{.Ignore}}
 
 Qatu · Alquila. Contrata. Construye.

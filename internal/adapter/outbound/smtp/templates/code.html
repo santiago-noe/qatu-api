@@ -11,10 +11,10 @@
       <tr>
         <td style="padding:24px">
           <p style="margin:0 0 12px;font-size:16px">Hola {{.Name}},</p>
-          <p style="margin:0 0 16px;font-size:15px;line-height:1.5">Usa este código para confirmar tu correo en Qatu:</p>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.5">{{.Intro}}</p>
           <p style="margin:0 0 16px;padding:14px 0;background:#fff1cc;border-radius:8px;text-align:center;font-size:32px;font-weight:bold;letter-spacing:8px">{{.Code}}</p>
           <p style="margin:0 0 16px;font-size:14px;color:#4b5563">Vence en {{.ValidFor}}. No lo compartas con nadie: Qatu nunca te lo pedirá por teléfono ni por chat.</p>
-          <p style="margin:0;font-size:13px;color:#6b7280">Si no creaste una cuenta en Qatu, ignora este correo.</p>
+          <p style="margin:0;font-size:13px;color:#6b7280">{{.Ignore}}</p>
         </td>
       </tr>
     </table>
