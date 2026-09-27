@@ -95,6 +95,26 @@ func TestAccountRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("verificar correo una sola vez", func(t *testing.T) {
+		audit := domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditEmailVerified, Entity: "user", EntityID: acc.User.ID}
+		if err := repo.MarkEmailVerified(ctx, acc.User.ID, time.Now(), audit); err != nil {
+			t.Fatal(err)
+		}
+		user, _ := repo.FindUser(ctx, acc.User.ID)
+		if !user.IsVerified() || user.Version != 2 {
+			t.Fatalf("debe quedar verificado y con versión nueva: %+v", user)
+		}
+		if err := repo.MarkEmailVerified(ctx, acc.User.ID, time.Now(), audit); !errors.Is(err, domain.ErrEmailAlreadyVerified) {
+			t.Fatalf("la segunda vez debe fallar, llegó %v", err)
+		}
+		var audits int
+		_ = db.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE entity_id = $1 AND action = $2`,
+			acc.User.ID, domain.AuditEmailVerified).Scan(&audits)
+		if audits != 1 {
+			t.Fatalf("una sola auditoría de verificación, hay %d", audits)
+		}
+	})
+
 	t.Run("auditoría suelta", func(t *testing.T) {
 		if err := repo.Record(ctx, domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditUserLogin,
 			Entity: "user", EntityID: acc.User.ID, After: map[string]any{"provider": "password"}}); err != nil {
