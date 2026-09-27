@@ -1,3 +1,7 @@
+# Carga las variables de .env (si existe) para make run/dev/migrate.
+-include .env
+export
+
 .PHONY: run dev migrate-up migrate-down test lint build
 run:
 	go run ./cmd/server

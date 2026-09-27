@@ -1,3 +1,75 @@
+// Command server arranca la API HTTP de Qatu.
 package main
 
-func main() {}
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+
+	apihttp "github.com/santiago-noe/qatu-api/internal/adapter/inbound/http"
+	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/handler"
+	"github.com/santiago-noe/qatu-api/internal/adapter/logging"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/postgres"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
+	"github.com/santiago-noe/qatu-api/internal/config"
+	"github.com/santiago-noe/qatu-api/internal/core/service"
+)
+
+const healthTimeout = 2 * time.Second
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	log := logging.New(cfg.IsProduction())
+
+	// Adaptadores de salida.
+	db, err := postgres.New(ctx, cfg.Database.URL)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	cache := redisclient.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	defer cache.Close()
+
+	// Casos de uso y adaptadores de entrada.
+	health := service.NewHealthService(healthTimeout, db, cache)
+	app := apihttp.NewRouter(log, apihttp.Handlers{
+		Health: handler.NewHealthHandler(health),
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.HTTP.Port)
+		log.Info().Str("addr", addr).Str("env", cfg.Env).Msg("qatu-api escuchando")
+		errCh <- app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true})
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	log.Info().Msg("apagando qatu-api")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
+	defer cancel()
+	return app.ShutdownWithContext(shutdownCtx)
+}
