@@ -45,6 +45,8 @@ type authResponse struct {
 		ExpiresAt time.Time `json:"expires_at"`
 	} `json:"session"`
 	User userResponse `json:"user"`
+	// TwoFactorRequired: la app pide el código (POST /auth/two-factor/send) antes de abrir el panel interno.
+	TwoFactorRequired bool `json:"two_factor_required"`
 	// VerificationSent solo aparece en el registro: si es false, la app ofrece reenviar el código.
 	VerificationSent *bool `json:"verification_sent,omitempty"`
 }
@@ -53,6 +55,7 @@ func toAuthResponse(r service.AuthResult) authResponse {
 	var res authResponse
 	res.Session.Token, res.Session.ExpiresAt = r.Token, r.Session.ExpiresAt
 	res.User = toUserResponse(r.User)
+	res.TwoFactorRequired = r.Session.NeedsTwoFactor()
 	return res
 }
 
