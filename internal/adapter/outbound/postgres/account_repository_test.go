@@ -180,6 +180,43 @@ func TestAccountRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("roles y estado", func(t *testing.T) {
+		admin := newAccount("admin@qatu.pe")
+		if err := repo.CreateAccount(ctx, admin); err != nil {
+			t.Fatal(err)
+		}
+		audit := domain.AuditEntry{ActorID: admin.User.ID, Action: domain.AuditRolesChanged, Entity: "user", EntityID: acc.User.ID}
+		if err := repo.ChangeRoles(ctx, port.RoleChange{UserID: acc.User.ID, Add: []domain.Role{domain.RoleSupport, domain.RoleModerator},
+			GrantedBy: admin.User.ID, At: time.Now(), Audit: audit}); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.ChangeRoles(ctx, port.RoleChange{UserID: acc.User.ID, Add: []domain.Role{domain.RoleSupport},
+			Remove: []domain.Role{domain.RoleModerator}, At: time.Now(), Audit: audit}); err != nil {
+			t.Fatal("agregar un rol que ya tiene no debe fallar")
+		}
+		user, _ := repo.FindUser(ctx, acc.User.ID)
+		if !user.HasRole(domain.RoleSupport) || user.HasRole(domain.RoleModerator) || !user.HasRole(domain.RoleClient) {
+			t.Fatalf("roles inesperados: %v", user.Roles)
+		}
+		if err := repo.ChangeRoles(ctx, port.RoleChange{UserID: uuid.NewString(), At: time.Now(), Audit: audit}); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("usuario inexistente: %v", err)
+		}
+
+		status := domain.AuditEntry{ActorID: admin.User.ID, Action: domain.AuditStatusChanged, Entity: "user", EntityID: acc.User.ID}
+		if err := repo.ChangeStatus(ctx, port.StatusChange{UserID: acc.User.ID, Status: domain.UserSuspended, Reason: "Reporte", Audit: status}); err != nil {
+			t.Fatal(err)
+		}
+		if user, _ := repo.FindUser(ctx, acc.User.ID); user.Status != domain.UserSuspended || user.SuspendedReason != "Reporte" {
+			t.Fatalf("debe quedar suspendido con motivo: %+v", user)
+		}
+		if err := repo.ChangeStatus(ctx, port.StatusChange{UserID: acc.User.ID, Status: domain.UserActive, Audit: status}); err != nil {
+			t.Fatal(err)
+		}
+		if user, _ := repo.FindUser(ctx, acc.User.ID); user.Status != domain.UserActive || user.SuspendedReason != "" {
+			t.Fatalf("al reactivar se borra el motivo: %+v", user)
+		}
+	})
+
 	t.Run("auditoría suelta", func(t *testing.T) {
 		if err := repo.Record(ctx, domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditUserLogin,
 			Entity: "user", EntityID: acc.User.ID, After: map[string]any{"provider": "password"}}); err != nil {
