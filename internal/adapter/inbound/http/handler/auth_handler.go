@@ -59,6 +59,8 @@ type authResponse struct {
 		ExpiresAt time.Time `json:"expires_at"`
 	} `json:"session"`
 	User userResponse `json:"user"`
+	// VerificationSent solo aparece en el registro: si es false, la app ofrece reenviar el código.
+	VerificationSent *bool `json:"verification_sent,omitempty"`
 }
 
 func toUserResponse(u domain.User) userResponse {
@@ -92,7 +94,9 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.Status(fiber.StatusCreated).JSON(toAuthResponse(res))
+	body := toAuthResponse(res)
+	body.VerificationSent = &res.VerificationSent
+	return c.Status(fiber.StatusCreated).JSON(body)
 }
 
 // POST /api/v1/auth/login
