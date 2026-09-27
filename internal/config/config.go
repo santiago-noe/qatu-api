@@ -22,7 +22,19 @@ type Config struct {
 	Codes     CodesConfig     `mapstructure:"codes"`
 	Limits    LimitsConfig    `mapstructure:"ratelimit"`
 	Turnstile TurnstileConfig `mapstructure:"turnstile"`
+	Google    GoogleConfig    `mapstructure:"google"`
 }
+
+// GoogleConfig: acceso con Google (OAuth 2.0 + PKCE). Sin client_id (solo en desarrollo)
+// el botón responde "no disponible". RedirectURL apunta al BFF de qatu-app, no a esta API.
+type GoogleConfig struct {
+	ClientID     string        `mapstructure:"client_id"`
+	ClientSecret string        `mapstructure:"client_secret"`
+	RedirectURL  string        `mapstructure:"redirect_url"`
+	StateTTL     time.Duration `mapstructure:"state_ttl"`
+}
+
+func (g GoogleConfig) Enabled() bool { return g.ClientID != "" }
 
 // TurnstileConfig: captcha de Cloudflare en formularios públicos. Sin secreto (solo en
 // desarrollo) la verificación queda desactivada; las claves de prueba de Cloudflare sirven
@@ -128,6 +140,10 @@ var defaults = map[string]any{
 	"codes.max_attempts":                 5,
 	"codes.resend_cooldown":              "1m",
 	"turnstile.secret":                   "",
+	"google.client_id":                   "",
+	"google.client_secret":               "",
+	"google.redirect_url":                "http://localhost:3000/api/auth/google/callback",
+	"google.state_ttl":                   "10m",
 }
 
 func Load() (Config, error) {
@@ -149,6 +165,8 @@ func Load() (Config, error) {
 		for _, s := range []struct{ env, value string }{
 			{"APP__SECURITY__CODE_SECRET", cfg.Security.CodeSecret},
 			{"APP__TURNSTILE__SECRET", cfg.Turnstile.Secret},
+			{"APP__GOOGLE__CLIENT_ID", cfg.Google.ClientID},
+			{"APP__GOOGLE__CLIENT_SECRET", cfg.Google.ClientSecret},
 		} {
 			if s.value == "" {
 				return Config{}, fmt.Errorf("config: %s es obligatorio en producción", s.env)
@@ -157,6 +175,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Security.CodeSecret == "" {
 		cfg.Security.CodeSecret = devCodeSecret
+	}
+	if cfg.Google.Enabled() && cfg.Google.ClientSecret == "" {
+		return Config{}, fmt.Errorf("config: APP__GOOGLE__CLIENT_SECRET es obligatorio si hay APP__GOOGLE__CLIENT_ID")
 	}
 	if cfg.HTTP.Port <= 0 {
 		return Config{}, fmt.Errorf("config: APP__HTTP__PORT inválido: %d", cfg.HTTP.Port)
