@@ -75,13 +75,22 @@ func (s *SessionService) Authenticate(ctx context.Context, token string) (domain
 		return domain.Session{}, domain.ErrSessionInvalid
 	}
 	if now.Sub(session.RenewedAt) >= s.cfg.RenewAfter {
-		session.RenewedAt, session.ExpiresAt = now, now.Add(s.cfg.TTL)
-		if err := s.store.Extend(ctx, session.ID, session.RenewedAt, session.ExpiresAt); err != nil &&
-			!errors.Is(err, domain.ErrSessionInvalid) {
+		session, err = s.store.Update(ctx, session.ID, func(x *domain.Session) {
+			x.RenewedAt, x.ExpiresAt = now, now.Add(s.cfg.TTL)
+		})
+		if err != nil && !errors.Is(err, domain.ErrSessionInvalid) {
 			return domain.Session{}, fmt.Errorf("sesión: renovar: %w", err)
 		}
+		return session, err
 	}
 	return session, nil
+}
+
+// CompleteTwoFactor marca que la sesión confirmó el segundo paso. Es por sesión: otro
+// dispositivo del mismo usuario debe confirmar su propio código.
+func (s *SessionService) CompleteTwoFactor(ctx context.Context, id string) (domain.Session, error) {
+	now := s.clock.Now()
+	return s.store.Update(ctx, id, func(x *domain.Session) { x.TwoFactorAt = &now })
 }
 
 // Revoke cierra la sesión actual (cerrar sesión en este dispositivo).
