@@ -17,6 +17,9 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Session  SessionConfig  `mapstructure:"session"`
 	Legal    LegalConfig    `mapstructure:"legal"`
+	SMTP     SMTPConfig     `mapstructure:"smtp"`
+	Security SecurityConfig `mapstructure:"security"`
+	Codes    CodesConfig    `mapstructure:"codes"`
 }
 
 type HTTPConfig struct {
@@ -36,6 +39,29 @@ type LegalConfig struct {
 	TermsVersion   string `mapstructure:"terms_version"`
 	PrivacyVersion string `mapstructure:"privacy_version"`
 }
+
+type SMTPConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
+}
+
+type SecurityConfig struct {
+	// CodeSecret firma los códigos de un solo uso guardados en Redis.
+	CodeSecret string `mapstructure:"code_secret"`
+}
+
+// CodesConfig: códigos de 6 dígitos (verificación de correo, recuperación, dos pasos).
+type CodesConfig struct {
+	TTL            time.Duration `mapstructure:"ttl"`
+	MaxAttempts    int           `mapstructure:"max_attempts"`
+	ResendCooldown time.Duration `mapstructure:"resend_cooldown"`
+}
+
+// Solo para desarrollo: en producción Load exige APP__SECURITY__CODE_SECRET.
+const devCodeSecret = "dev-only-code-secret-change-me"
 
 type DatabaseConfig struct {
 	URL string `mapstructure:"url"`
@@ -61,6 +87,15 @@ var defaults = map[string]any{
 	"session.renew_after":   "24h",
 	"legal.terms_version":   "borrador-2026-09",
 	"legal.privacy_version": "borrador-2026-09",
+	"smtp.host":             "localhost",
+	"smtp.port":             1025,
+	"smtp.username":         "",
+	"smtp.password":         "",
+	"smtp.from":             "Qatu <no-responder@qatu.local>",
+	"security.code_secret":  "",
+	"codes.ttl":             "15m",
+	"codes.max_attempts":    5,
+	"codes.resend_cooldown": "1m",
 }
 
 func Load() (Config, error) {
@@ -76,6 +111,12 @@ func Load() (Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
+	}
+	if cfg.Security.CodeSecret == "" {
+		if cfg.IsProduction() {
+			return Config{}, fmt.Errorf("config: APP__SECURITY__CODE_SECRET es obligatorio en producción")
+		}
+		cfg.Security.CodeSecret = devCodeSecret
 	}
 	if cfg.HTTP.Port <= 0 {
 		return Config{}, fmt.Errorf("config: APP__HTTP__PORT inválido: %d", cfg.HTTP.Port)
