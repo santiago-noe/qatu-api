@@ -48,6 +48,21 @@ func RequireRole(roles ...domain.Role) fiber.Handler {
 	}
 }
 
+// RequireTwoFactor exige que una sesión con roles internos haya confirmado el segundo paso.
+// Va después de RequireRole en toda ruta interna (soporte, moderación, administración).
+func RequireTwoFactor() fiber.Handler {
+	return func(c fiber.Ctx) error {
+		session, ok := SessionFrom(c)
+		if !ok {
+			return fiber.NewError(fiber.StatusUnauthorized, "no_autenticado")
+		}
+		if session.NeedsTwoFactor() {
+			return fiber.NewError(fiber.StatusForbidden, "dos_pasos_requerido")
+		}
+		return c.Next()
+	}
+}
+
 // SessionFrom devuelve la sesión que dejó SessionAuth.
 func SessionFrom(c fiber.Ctx) (domain.Session, bool) {
 	session, ok := c.Locals(sessionLocal).(domain.Session)
