@@ -63,6 +63,9 @@ var domainErrors = []struct {
 	{domain.ErrOAuthSignupRequired, fiber.StatusConflict, "registro_requerido"},
 	{domain.ErrOAuthAlreadyLinked, fiber.StatusConflict, "google_ya_vinculado"},
 	{domain.ErrAccountDeleted, fiber.StatusForbidden, "cuenta_eliminada"},
+	{domain.ErrInvalidLocation, fiber.StatusBadRequest, "ubicacion_invalida"},
+	{domain.ErrOutOfCoverage, fiber.StatusNotFound, "fuera_de_cobertura"},
+	{domain.ErrInvalidVertical, fiber.StatusBadRequest, "vertical_invalida"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
