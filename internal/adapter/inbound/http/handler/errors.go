@@ -66,6 +66,16 @@ var domainErrors = []struct {
 	{domain.ErrInvalidLocation, fiber.StatusBadRequest, "ubicacion_invalida"},
 	{domain.ErrOutOfCoverage, fiber.StatusNotFound, "fuera_de_cobertura"},
 	{domain.ErrInvalidVertical, fiber.StatusBadRequest, "vertical_invalida"},
+	{domain.ErrInvalidSlug, fiber.StatusUnprocessableEntity, "slug_invalido"},
+	{domain.ErrInvalidDescription, fiber.StatusUnprocessableEntity, "descripcion_invalida"},
+	{domain.ErrInvalidIcon, fiber.StatusUnprocessableEntity, "icono_invalido"},
+	{domain.ErrInvalidRisk, fiber.StatusUnprocessableEntity, "riesgo_invalido"},
+	{domain.ErrInvalidSortOrder, fiber.StatusUnprocessableEntity, "orden_invalido"},
+	{domain.ErrInvalidSchema, fiber.StatusUnprocessableEntity, "esquema_invalido"},
+	{domain.ErrSlugTaken, fiber.StatusConflict, "slug_registrado"},
+	{domain.ErrCategoryTree, fiber.StatusUnprocessableEntity, "arbol_invalido"},
+	{domain.ErrUnknownSetting, fiber.StatusUnprocessableEntity, "ajuste_desconocido"},
+	{domain.ErrInvalidSettingValue, fiber.StatusUnprocessableEntity, "valor_invalido"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
