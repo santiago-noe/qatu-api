@@ -23,6 +23,7 @@ type Handlers struct {
 	TwoFactor *handler.TwoFactorHandler
 	OAuth     *handler.OAuthHandler
 	Catalog   *handler.CatalogHandler
+	Location  *handler.LocationHandler
 	// AdminCatalog: categorías, ciudades y ajustes de la plataforma.
 	AdminCatalog *handler.AdminCatalogHandler
 }
@@ -84,6 +85,8 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Post("/password", h.Me.ChangePassword)
 	me.Get("/sessions", h.Me.Sessions)
 	me.Delete("/sessions/:id", h.Me.RevokeSession)
+	me.Get("/location", h.Location.Get)
+	me.Put("/location", h.Location.Set)
 
 	admin := v1.Group("/admin", staff(m, domain.RoleAdmin)...)
 	admin.Get("/users/:id", h.Admin.Get)
