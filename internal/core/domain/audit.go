@@ -26,4 +26,11 @@ const (
 	AuditStatusChanged    = "user.status_changed"
 	AuditTwoFactorPassed  = "user.two_factor_passed"
 	AuditIdentityLinked   = "user.identity_linked"
+
+	// Catálogo y configuración (feature 002).
+	AuditCategoryCreated   = "catalog.category_created"
+	AuditCategoryUpdated   = "catalog.category_updated"
+	AuditCityUpdated       = "catalog.city_updated"
+	AuditCategoryCityScope = "catalog.category_city_scope"
+	AuditSettingChanged    = "platform.setting_changed"
 )
