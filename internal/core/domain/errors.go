@@ -39,4 +39,7 @@ var (
 	ErrOAuthLinkNeedsPassword = errors.New("ya tienes una cuenta con ese correo: inicia sesión con tu contraseña y vincula Google desde tu perfil")
 	ErrOAuthSignupRequired    = errors.New("aún no tienes cuenta en Qatu: regístrate con Google aceptando los términos")
 	ErrOAuthAlreadyLinked     = errors.New("tu cuenta de Qatu ya está vinculada a otra cuenta de Google")
+	ErrInvalidLocation        = errors.New("la ubicación no es válida")
+	ErrOutOfCoverage          = errors.New("todavía no llegamos a esa zona; elige tu distrito de la lista")
+	ErrInvalidVertical        = errors.New("tipo de catálogo desconocido")
 )
