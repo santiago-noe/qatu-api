@@ -255,4 +255,24 @@ func TestAccountRepository(t *testing.T) {
 			t.Fatalf("una cuenta tiene un solo Google, llegó %v", err)
 		}
 	})
+
+	t.Run("ubicación: el distrito debe ser de la ciudad", func(t *testing.T) {
+		var cityID, zoneID string
+		if err := db.Pool.QueryRow(ctx, `SELECT city_id, id FROM zones WHERE slug = 'carmen-alto'`).Scan(&cityID, &zoneID); err != nil {
+			t.Fatal(err)
+		}
+		entry := domain.AuditEntry{ActorID: acc.User.ID, Action: domain.AuditLocationUpdated, Entity: "user", EntityID: acc.User.ID}
+		if err := repo.UpdateLocation(ctx, acc.User.ID, cityID, zoneID, entry); err != nil {
+			t.Fatal(err)
+		}
+		if u, _ := repo.FindUser(ctx, acc.User.ID); u.CityID != cityID || u.ZoneID != zoneID {
+			t.Fatalf("FindUser devuelve la ubicación: %+v", u)
+		}
+		if err := repo.UpdateLocation(ctx, acc.User.ID, "", zoneID, entry); err == nil {
+			t.Fatal("un distrito sin ciudad lo rechaza la base")
+		}
+		if err := repo.UpdateLocation(ctx, uuid.NewString(), cityID, zoneID, entry); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("un usuario inexistente: %v", err)
+		}
+	})
 }
