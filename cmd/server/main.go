@@ -126,6 +126,7 @@ func run() error {
 	catalogCache := redisclient.NewCache(cache.RDB, redisPrefix)
 	catalog := service.NewCatalogService(catalogRepo, catalogCache)
 	catalogAdmin := service.NewCatalogAdminService(catalogRepo, jsonschema.New(), catalogCache)
+	userLocation := service.NewUserLocationService(accounts, catalog)
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
@@ -139,6 +140,7 @@ func run() error {
 			TwoFactor:    handler.NewTwoFactorHandler(twoFactor),
 			OAuth:        handler.NewOAuthHandler(oauth),
 			Catalog:      handler.NewCatalogHandler(catalog),
+			Location:     handler.NewLocationHandler(userLocation),
 			AdminCatalog: handler.NewAdminCatalogHandler(catalogAdmin),
 		},
 		apihttp.Middlewares{
