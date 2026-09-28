@@ -59,6 +59,8 @@ type AccountRepository interface {
 	SetPassword(ctx context.Context, update PasswordUpdate) error
 	// FindUserIdentity devuelve la identidad del usuario para un proveedor, o domain.ErrNotFound.
 	FindUserIdentity(ctx context.Context, userID string, provider domain.AuthProvider) (domain.AuthIdentity, error)
+	// UpdateLocation guarda la ciudad y el distrito (vacíos = sin ubicación) y audita en una transacción.
+	UpdateLocation(ctx context.Context, userID, cityID, zoneID string, audit domain.AuditEntry) error
 	// UpdateName cambia el nombre y audita en una transacción.
 	UpdateName(ctx context.Context, userID, name string, audit domain.AuditEntry) error
 	ChangeRoles(ctx context.Context, change RoleChange) error
