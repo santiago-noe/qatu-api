@@ -22,6 +22,7 @@ type Handlers struct {
 	Admin     *handler.AdminUserHandler
 	TwoFactor *handler.TwoFactorHandler
 	OAuth     *handler.OAuthHandler
+	Catalog   *handler.CatalogHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -54,6 +55,12 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 
 	v1 := app.Group("/api/v1")
 	v1.Get("/health", h.Health.Get)
+
+	// Catálogo público (feature 002): sin sesión, con caché.
+	v1.Get("/catalog/categories", h.Catalog.Categories)
+	v1.Get("/cities", h.Catalog.Cities)
+	v1.Get("/cities/:slug/zones", h.Catalog.Zones)
+	v1.Get("/geo/zone", h.Catalog.ZoneAt)
 
 	auth := v1.Group("/auth")
 	auth.Post("/register", m.RateLimit("register"), m.Human("register"), h.Auth.Register)
