@@ -5,7 +5,6 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/middleware"
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
 )
 
@@ -66,8 +65,7 @@ func (h *AdminUserHandler) ChangeRoles(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	session, _ := middleware.SessionFrom(c)
-	user, err := h.admin.ChangeRoles(c.Context(), session.UserID, c.Params("id"), add, remove, c.IP())
+	user, err := h.admin.ChangeRoles(c.Context(), actorID(c), c.Params("id"), add, remove, c.IP())
 	if err != nil {
 		return err
 	}
@@ -80,8 +78,7 @@ func (h *AdminUserHandler) ChangeStatus(c fiber.Ctx) error {
 	if err := bindJSON(c, &req); err != nil {
 		return err
 	}
-	session, _ := middleware.SessionFrom(c)
-	user, err := h.admin.ChangeStatus(c.Context(), session.UserID, c.Params("id"), domain.UserStatus(req.Status), req.Reason, c.IP())
+	user, err := h.admin.ChangeStatus(c.Context(), actorID(c), c.Params("id"), domain.UserStatus(req.Status), req.Reason, c.IP())
 	if err != nil {
 		return err
 	}
