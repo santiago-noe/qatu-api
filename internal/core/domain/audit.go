@@ -26,6 +26,7 @@ const (
 	AuditStatusChanged    = "user.status_changed"
 	AuditTwoFactorPassed  = "user.two_factor_passed"
 	AuditIdentityLinked   = "user.identity_linked"
+	AuditLocationUpdated  = "user.location_updated"
 
 	// Catálogo y configuración (feature 002).
 	AuditCategoryCreated   = "catalog.category_created"
