@@ -129,6 +129,16 @@ func (m *memoryAccounts) UpdateName(_ context.Context, userID, name string, audi
 	return nil
 }
 
+func (m *memoryAccounts) UpdateLocation(_ context.Context, userID, cityID, zoneID string, audit domain.AuditEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u := m.users[userID]
+	u.CityID, u.ZoneID = cityID, zoneID
+	m.users[userID] = u
+	m.audits = append(m.audits, audit)
+	return nil
+}
+
 func (m *memoryAccounts) ChangeRoles(_ context.Context, c port.RoleChange) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
