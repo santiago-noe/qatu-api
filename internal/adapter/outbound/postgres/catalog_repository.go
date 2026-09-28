@@ -19,22 +19,34 @@ func NewCatalogRepository(db *Client) *CatalogRepository { return &CatalogReposi
 // ListCategories: lo publicable de la vertical. Un ajuste por ciudad (category_city_overrides)
 // manda sobre el `enabled` global; las prohibidas nunca aparecen.
 func (r *CatalogRepository) ListCategories(ctx context.Context, vertical domain.Vertical, cityID string) ([]domain.Category, error) {
-	rows, err := r.db.Pool.Query(ctx, `
-		SELECT c.id, c.vertical, COALESCE(c.parent_id::text, ''), c.slug, c.name, COALESCE(c.description, ''),
-		       COALESCE(c.icon, ''), c.sort_order, c.attributes_schema, c.risk_level, c.prohibited, c.enabled
-		FROM categories c
+	return r.queryCategories(ctx, categorySelect+`
 		LEFT JOIN category_city_overrides o ON o.category_id = c.id AND o.city_id = NULLIF($2, '')::uuid
-		WHERE c.vertical = $1 AND NOT c.prohibited AND COALESCE(o.enabled, c.enabled)
-		ORDER BY c.parent_id NULLS FIRST, c.sort_order, c.name`, vertical, cityID)
+		WHERE c.vertical = $1 AND NOT c.prohibited AND COALESCE(o.enabled, c.enabled)`+categoryOrder, vertical, cityID)
+}
+
+// categorySelect y scanCategory son la única lectura de categorías (pública y del admin).
+const categorySelect = `
+	SELECT c.id, c.vertical, COALESCE(c.parent_id::text, ''), c.slug, c.name, COALESCE(c.description, ''),
+	       COALESCE(c.icon, ''), c.sort_order, c.attributes_schema, c.risk_level, c.prohibited, c.enabled
+	FROM categories c`
+
+// Raíces primero y luego sus tipos, cada grupo en su orden: BuildCategoryTree lo necesita así.
+const categoryOrder = `
+	ORDER BY c.parent_id NULLS FIRST, c.sort_order, c.name`
+
+func scanCategory(row pgx.Row) (domain.Category, error) {
+	var c domain.Category
+	err := row.Scan(&c.ID, &c.Vertical, &c.ParentID, &c.Slug, &c.Name, &c.Description, &c.Icon,
+		&c.SortOrder, &c.AttributesSchema, &c.RiskLevel, &c.Prohibited, &c.Enabled)
+	return c, err
+}
+
+func (r *CatalogRepository) queryCategories(ctx context.Context, sql string, args ...any) ([]domain.Category, error) {
+	rows, err := r.db.Pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Category, error) {
-		var c domain.Category
-		err := row.Scan(&c.ID, &c.Vertical, &c.ParentID, &c.Slug, &c.Name, &c.Description, &c.Icon,
-			&c.SortOrder, &c.AttributesSchema, &c.RiskLevel, &c.Prohibited, &c.Enabled)
-		return c, err
-	})
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Category, error) { return scanCategory(row) })
 }
 
 const citySelect = `
