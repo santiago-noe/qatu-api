@@ -23,6 +23,8 @@ type Handlers struct {
 	TwoFactor *handler.TwoFactorHandler
 	OAuth     *handler.OAuthHandler
 	Catalog   *handler.CatalogHandler
+	// AdminCatalog: categorías, ciudades y ajustes de la plataforma.
+	AdminCatalog *handler.AdminCatalogHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -87,6 +89,14 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	admin.Get("/users/:id", h.Admin.Get)
 	admin.Patch("/users/:id/roles", h.Admin.ChangeRoles)
 	admin.Patch("/users/:id/status", h.Admin.ChangeStatus)
+	admin.Get("/catalog/categories", h.AdminCatalog.Categories)
+	admin.Post("/catalog/categories", h.AdminCatalog.CreateCategory)
+	admin.Patch("/catalog/categories/:id", h.AdminCatalog.UpdateCategory)
+	admin.Put("/catalog/categories/:id/cities/:city", h.AdminCatalog.SetCategoryCityScope)
+	admin.Patch("/cities/:slug", h.AdminCatalog.SetCityEnabled)
+	admin.Get("/settings", h.AdminCatalog.Settings)
+	admin.Put("/settings", h.AdminCatalog.SetSetting)
+	admin.Get("/settings/:key/history", h.AdminCatalog.SettingHistory)
 
 	return app
 }
