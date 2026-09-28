@@ -128,6 +128,7 @@ func (r *AccountRepository) findUserWhere(ctx context.Context, where string, arg
 	err := r.db.Pool.QueryRow(ctx, `
 		SELECT u.id, u.email, u.email_verified_at, u.phone, u.phone_verified_at, u.name, u.avatar_url,
 		       u.adult_declared_at, u.status, u.suspended_reason, u.verification_level,
+		       COALESCE(u.city_id::text, ''), COALESCE(u.zone_id::text, ''),
 		       u.created_at, u.updated_at, u.version,
 		       COALESCE(array_agg(r.role ORDER BY r.role) FILTER (WHERE r.role IS NOT NULL), '{}')
 		FROM users u LEFT JOIN user_roles r ON r.user_id = u.id
@@ -135,6 +136,7 @@ func (r *AccountRepository) findUserWhere(ctx context.Context, where string, arg
 		GROUP BY u.id`, arg).Scan(
 		&u.ID, &email, &u.EmailVerifiedAt, &phone, &u.PhoneVerifiedAt, &u.Name, &avatar,
 		&u.AdultDeclaredAt, &u.Status, &reason, &u.VerificationLevel,
+		&u.CityID, &u.ZoneID,
 		&u.CreatedAt, &u.UpdatedAt, &u.Version, &roles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, domain.ErrNotFound
@@ -181,6 +183,23 @@ func (r *AccountRepository) MarkEmailVerified(ctx context.Context, userID string
 func (r *AccountRepository) UpdateName(ctx context.Context, userID, name string, audit domain.AuditEntry) error {
 	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE users SET name = $2, version = version + 1 WHERE id = $1`, userID, name)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrNotFound
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+}
+
+// UpdateLocation guarda la ciudad y el distrito del usuario y audita en una transacción. La base
+// exige que el distrito sea de esa ciudad (users_zone_in_city).
+func (r *AccountRepository) UpdateLocation(ctx context.Context, userID, cityID, zoneID string, audit domain.AuditEntry) error {
+	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE users SET city_id = NULLIF($2, '')::uuid, zone_id = NULLIF($3, '')::uuid, version = version + 1
+			WHERE id = $1`, userID, cityID, zoneID)
 		if err != nil {
 			return err
 		}
