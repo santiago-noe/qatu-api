@@ -74,10 +74,13 @@ type User struct {
 	Status            UserStatus
 	SuspendedReason   string
 	VerificationLevel int
-	Roles             []Role
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	Version           int
+	// CityID y ZoneID: dónde vive o trabaja (feature 002); vacíos hasta que lo elija.
+	CityID    string
+	ZoneID    string
+	Roles     []Role
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Version   int
 }
 
 func (u User) HasRole(r Role) bool { return slices.Contains(u.Roles, r) }
