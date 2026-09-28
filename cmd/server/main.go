@@ -18,6 +18,7 @@ import (
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/argon2"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/breachedlist"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/googleoauth"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/jsonschema"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/postgres"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/smtp"
@@ -121,20 +122,24 @@ func run() error {
 		Legal: legal, StateTTL: cfg.Google.StateTTL,
 	})
 
-	catalog := service.NewCatalogService(postgres.NewCatalogRepository(db), redisclient.NewCache(cache.RDB, redisPrefix))
+	catalogRepo := postgres.NewCatalogRepository(db)
+	catalogCache := redisclient.NewCache(cache.RDB, redisPrefix)
+	catalog := service.NewCatalogService(catalogRepo, catalogCache)
+	catalogAdmin := service.NewCatalogAdminService(catalogRepo, jsonschema.New(), catalogCache)
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
 		apihttp.Handlers{
-			Health:    handler.NewHealthHandler(health),
-			Auth:      handler.NewAuthHandler(auth),
-			Email:     handler.NewEmailVerificationHandler(verification),
-			Password:  handler.NewPasswordResetHandler(passwordReset),
-			Me:        handler.NewMeHandler(account),
-			Admin:     handler.NewAdminUserHandler(adminUsers),
-			TwoFactor: handler.NewTwoFactorHandler(twoFactor),
-			OAuth:     handler.NewOAuthHandler(oauth),
-			Catalog:   handler.NewCatalogHandler(catalog),
+			Health:       handler.NewHealthHandler(health),
+			Auth:         handler.NewAuthHandler(auth),
+			Email:        handler.NewEmailVerificationHandler(verification),
+			Password:     handler.NewPasswordResetHandler(passwordReset),
+			Me:           handler.NewMeHandler(account),
+			Admin:        handler.NewAdminUserHandler(adminUsers),
+			TwoFactor:    handler.NewTwoFactorHandler(twoFactor),
+			OAuth:        handler.NewOAuthHandler(oauth),
+			Catalog:      handler.NewCatalogHandler(catalog),
+			AdminCatalog: handler.NewAdminCatalogHandler(catalogAdmin),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
