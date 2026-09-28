@@ -121,6 +121,8 @@ func run() error {
 		Legal: legal, StateTTL: cfg.Google.StateTTL,
 	})
 
+	catalog := service.NewCatalogService(postgres.NewCatalogRepository(db), redisclient.NewCache(cache.RDB, redisPrefix))
+
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
 		apihttp.Handlers{
@@ -132,6 +134,7 @@ func run() error {
 			Admin:     handler.NewAdminUserHandler(adminUsers),
 			TwoFactor: handler.NewTwoFactorHandler(twoFactor),
 			OAuth:     handler.NewOAuthHandler(oauth),
+			Catalog:   handler.NewCatalogHandler(catalog),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
