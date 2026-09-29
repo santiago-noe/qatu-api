@@ -98,6 +98,11 @@ func (s *CatalogAdminService) UpdateCategory(ctx context.Context, actorID, id st
 	return next, nil
 }
 
+// Cities devuelve todas las ciudades, también las apagadas (el admin las enciende).
+func (s *CatalogAdminService) Cities(ctx context.Context) ([]domain.City, error) {
+	return s.repo.ListAllCities(ctx)
+}
+
 // SetCityEnabled enciende o apaga una ciudad (feature flag).
 func (s *CatalogAdminService) SetCityEnabled(ctx context.Context, actorID, citySlug string, enabled bool, ip string) (domain.City, error) {
 	city, err := s.repo.FindCityBySlug(ctx, citySlug)
