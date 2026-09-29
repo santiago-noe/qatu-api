@@ -59,7 +59,11 @@ func scanCity(row pgx.Row) (domain.City, error) {
 }
 
 func (r *CatalogRepository) ListCities(ctx context.Context) ([]domain.City, error) {
-	rows, err := r.db.Pool.Query(ctx, citySelect+` WHERE enabled ORDER BY name`)
+	return r.queryCities(ctx, citySelect+` WHERE enabled ORDER BY name`)
+}
+
+func (r *CatalogRepository) queryCities(ctx context.Context, sql string) ([]domain.City, error) {
+	rows, err := r.db.Pool.Query(ctx, sql)
 	if err != nil {
 		return nil, err
 	}
