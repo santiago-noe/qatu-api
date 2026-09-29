@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
@@ -104,5 +105,22 @@ func TestChangeStatusRules(t *testing.T) {
 	}
 	if _, err := f.svc.ChangeStatus(ctx, f.adminID, f.ana.User.ID, domain.UserDeleted, "", ""); !errors.Is(err, domain.ErrInvalidStatus) {
 		t.Fatalf("eliminar no es un cambio de estado de admin (va por ARCO), llegó %v", err)
+	}
+}
+
+func TestGetByEmail(t *testing.T) {
+	f := newAdminFixture(t)
+	ctx := context.Background()
+
+	// El correo se normaliza igual que al registrarse: mayúsculas y espacios no impiden encontrarla.
+	user, err := f.svc.GetByEmail(ctx, "  "+strings.ToUpper(f.ana.User.Email)+" ")
+	if err != nil || user.ID != f.ana.User.ID {
+		t.Fatalf("GetByEmail = %+v, %v", user, err)
+	}
+	if _, err := f.svc.GetByEmail(ctx, "nadie@qatu.pe"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("un correo sin cuenta = %v, quiero ErrNotFound", err)
+	}
+	if _, err := f.svc.GetByEmail(ctx, "no-es-correo"); !errors.Is(err, domain.ErrInvalidEmail) {
+		t.Fatalf("un correo mal escrito = %v, quiero ErrInvalidEmail", err)
 	}
 }
