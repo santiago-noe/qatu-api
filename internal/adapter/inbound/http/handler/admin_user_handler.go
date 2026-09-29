@@ -11,6 +11,7 @@ import (
 // AdminUsers es lo que el handler necesita de service.AdminUserService.
 type AdminUsers interface {
 	Get(ctx context.Context, userID string) (domain.User, error)
+	GetByEmail(ctx context.Context, email string) (domain.User, error)
 	ChangeRoles(ctx context.Context, actorID, userID string, add, remove []domain.Role, ip string) (domain.User, error)
 	ChangeStatus(ctx context.Context, actorID, userID string, status domain.UserStatus, reason, ip string) (domain.User, error)
 }
@@ -40,6 +41,20 @@ type adminUserResponse struct {
 
 func toAdminUserResponse(u domain.User) adminUserResponse {
 	return adminUserResponse{userResponse: toUserResponse(u), SuspendedReason: u.SuspendedReason}
+}
+
+// GET /api/v1/admin/users?email=ana@correo.pe — búsqueda exacta por correo. No hay listado
+// masivo de usuarios: el admin busca a quien le escribió a soporte (datos mínimos, Ley 29733).
+func (h *AdminUserHandler) Find(c fiber.Ctx) error {
+	email := c.Query("email")
+	if email == "" {
+		return badRequest("Indica el correo que buscas.")
+	}
+	user, err := h.admin.GetByEmail(c.Context(), email)
+	if err != nil {
+		return err
+	}
+	return c.JSON(toAdminUserResponse(user))
 }
 
 // GET /api/v1/admin/users/:id
