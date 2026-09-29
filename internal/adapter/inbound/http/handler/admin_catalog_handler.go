@@ -18,6 +18,7 @@ type CatalogAdmin interface {
 	Categories(ctx context.Context, vertical domain.Vertical) ([]domain.Category, error)
 	CreateCategory(ctx context.Context, actorID string, in domain.Category, ip string) (domain.Category, error)
 	UpdateCategory(ctx context.Context, actorID, id string, p service.CategoryPatch, ip string) (domain.Category, error)
+	Cities(ctx context.Context) ([]domain.City, error)
 	SetCityEnabled(ctx context.Context, actorID, citySlug string, enabled bool, ip string) (domain.City, error)
 	SetCategoryCityScope(ctx context.Context, actorID, categoryID, citySlug string, enabled *bool, ip string) error
 	Settings(ctx context.Context) ([]domain.Setting, error)
@@ -196,6 +197,32 @@ func (h *AdminCatalogHandler) SetCategoryCityScope(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// adminCityResponse: el admin ve también las ciudades apagadas.
+type adminCityResponse struct {
+	ID      string `json:"id"`
+	Slug    string `json:"slug"`
+	Name    string `json:"name"`
+	Region  string `json:"region"`
+	Enabled bool   `json:"enabled"`
+}
+
+func toAdminCity(c domain.City) adminCityResponse {
+	return adminCityResponse{ID: c.ID, Slug: c.Slug, Name: c.Name, Region: c.Region, Enabled: c.Enabled}
+}
+
+// GET /api/v1/admin/cities
+func (h *AdminCatalogHandler) Cities(c fiber.Ctx) error {
+	cities, err := h.admin.Cities(c.Context())
+	if err != nil {
+		return err
+	}
+	out := make([]adminCityResponse, len(cities))
+	for i, city := range cities {
+		out[i] = toAdminCity(city)
+	}
+	return c.JSON(fiber.Map{"cities": out})
+}
+
 // PATCH /api/v1/admin/cities/:slug {"enabled": true|false}
 func (h *AdminCatalogHandler) SetCityEnabled(c fiber.Ctx) error {
 	var req enabledRequest
@@ -209,7 +236,7 @@ func (h *AdminCatalogHandler) SetCityEnabled(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(fiber.Map{"slug": city.Slug, "name": city.Name, "enabled": city.Enabled})
+	return c.JSON(toAdminCity(city))
 }
 
 // GET /api/v1/admin/settings
