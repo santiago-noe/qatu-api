@@ -89,6 +89,7 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Put("/location", h.Location.Set)
 
 	admin := v1.Group("/admin", staff(m, domain.RoleAdmin)...)
+	admin.Get("/users", h.Admin.Find)
 	admin.Get("/users/:id", h.Admin.Get)
 	admin.Patch("/users/:id/roles", h.Admin.ChangeRoles)
 	admin.Patch("/users/:id/status", h.Admin.ChangeStatus)
@@ -96,6 +97,7 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	admin.Post("/catalog/categories", h.AdminCatalog.CreateCategory)
 	admin.Patch("/catalog/categories/:id", h.AdminCatalog.UpdateCategory)
 	admin.Put("/catalog/categories/:id/cities/:city", h.AdminCatalog.SetCategoryCityScope)
+	admin.Get("/cities", h.AdminCatalog.Cities)
 	admin.Patch("/cities/:slug", h.AdminCatalog.SetCityEnabled)
 	admin.Get("/settings", h.AdminCatalog.Settings)
 	admin.Put("/settings", h.AdminCatalog.SetSetting)
