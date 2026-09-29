@@ -17,6 +17,8 @@ type CatalogAdmin interface {
 	CreateCategory(ctx context.Context, c domain.Category, audit domain.AuditEntry) (string, error)
 	UpdateCategory(ctx context.Context, c domain.Category, audit domain.AuditEntry) error
 
+	// ListAllCities devuelve todas las ciudades por nombre, también las apagadas.
+	ListAllCities(ctx context.Context) ([]domain.City, error)
 	// FindCityBySlug incluye las ciudades apagadas (el admin las enciende).
 	FindCityBySlug(ctx context.Context, slug string) (domain.City, error)
 	SetCityEnabled(ctx context.Context, cityID string, enabled bool, audit domain.AuditEntry) error

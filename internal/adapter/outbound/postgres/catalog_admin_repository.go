@@ -87,6 +87,10 @@ func (r *CatalogRepository) UpdateCategory(ctx context.Context, c domain.Categor
 	return mapCatalogError(err)
 }
 
+func (r *CatalogRepository) ListAllCities(ctx context.Context) ([]domain.City, error) {
+	return r.queryCities(ctx, citySelect+` ORDER BY name`)
+}
+
 func (r *CatalogRepository) FindCityBySlug(ctx context.Context, slug string) (domain.City, error) {
 	c, err := scanCity(r.db.Pool.QueryRow(ctx, citySelect+` WHERE slug = $1`, slug))
 	if errors.Is(err, pgx.ErrNoRows) {

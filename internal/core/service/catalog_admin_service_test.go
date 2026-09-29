@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -71,6 +73,10 @@ func (m *memoryCatalogAdmin) UpdateCategory(_ context.Context, c domain.Category
 	m.categories[c.ID] = c
 	m.audits = append(m.audits, a)
 	return nil
+}
+
+func (m *memoryCatalogAdmin) ListAllCities(context.Context) ([]domain.City, error) {
+	return slices.Collect(maps.Values(m.cities)), nil
 }
 
 func (m *memoryCatalogAdmin) FindCityBySlug(_ context.Context, slug string) (domain.City, error) {
