@@ -104,6 +104,9 @@ func TestCatalogAdminRepository(t *testing.T) {
 		if again, _ := repo.FindCityBySlug(ctx, "ayacucho"); again.Enabled {
 			t.Fatal("el admin la sigue encontrando, apagada")
 		}
+		if all, _ := repo.ListAllCities(ctx); len(all) != 1 || all[0].Enabled {
+			t.Fatalf("el admin lista también la ciudad apagada: %+v", all)
+		}
 	})
 
 	t.Run("ajustes con versión e historial", func(t *testing.T) {
