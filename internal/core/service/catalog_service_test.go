@@ -40,7 +40,7 @@ func (f *fakeCatalog) LocationAt(_ context.Context, p domain.GeoPoint) (domain.L
 	if p.Lat > -13 {
 		return domain.Location{}, domain.ErrOutOfCoverage
 	}
-	return domain.Location{City: ayacucho, Zone: domain.Zone{Slug: "ayacucho"}}, nil
+	return domain.Location{City: ayacucho, Zone: domain.Zone{ID: "z-ayacucho", CityID: ayacucho.ID, Slug: "ayacucho"}}, nil
 }
 
 // memoryCache tiene la semántica del adaptador de Redis; broken simula Redis caído.
