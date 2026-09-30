@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
 )
@@ -53,6 +54,14 @@ func TestPhotoRepository(t *testing.T) {
 	photos, _ = repo.ListPhotos(ctx, listingID)
 	if photos[0].ID != ids[2] || photos[1].ID != ids[0] {
 		t.Fatalf("nuevo orden: %s, %s", photos[0].ID, photos[1].ID)
+	}
+
+	stale, err := repo.ListStalePending(ctx, time.Now().Add(time.Minute), 10)
+	if err != nil || len(stale) != 2 {
+		t.Fatalf("pendientes más viejas que el corte (la lista y la fallida no): %d, %v", len(stale), err)
+	}
+	if stale, _ := repo.ListStalePending(ctx, time.Now().Add(-time.Hour), 10); len(stale) != 0 {
+		t.Fatal("las recientes no se tocan")
 	}
 
 	must(t, repo.DeletePhoto(ctx, ids[1]))
