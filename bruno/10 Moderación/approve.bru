@@ -1,0 +1,21 @@
+meta {
+  name: Aprobar
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/moderation/listings/{{listingId}}/approve
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": {{listingVersion}}
+  }
+}
+
+docs {
+  Se publica y se avisa al arrendador por correo.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Cola de revisión
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/moderation/listings
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.status === 200 && res.body.listings.length) { bru.setEnvVar("listingId", res.body.listings[0].listing.id); bru.setEnvVar("listingVersion", res.body.listings[0].listing.version); }
+}
+
+docs {
+  Rol moderator o admin y los dos pasos confirmados. La que más espera primero.
+}
