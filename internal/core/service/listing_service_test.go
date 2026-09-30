@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -484,5 +485,39 @@ func TestDepositSuggestionService(t *testing.T) {
 	}
 	if _, err := f.svc.DepositSuggestion(ctx, "ana", "t1", 0); !errors.Is(err, domain.ErrListingAmount) {
 		t.Fatal("sin valor no hay sugerencia")
+	}
+}
+
+// Los atributos se definen en la raíz (Construcción) y rigen para sus tipos.
+func TestSubmitValidatesInheritedAttributes(t *testing.T) {
+	f := newListingFixture()
+	ctx := context.Background()
+	root := f.catalog.categories["c1"]
+	root.AttributesSchema = json.RawMessage(`{"type":"object","properties":{"marca":{"type":"string"}},"required":["marca"]}`)
+	f.catalog.categories["c1"] = root
+	leaf := f.catalog.categories["t1"]
+	leaf.AttributesSchema = json.RawMessage(`{"type":"object","properties":{}}`)
+	f.catalog.categories["t1"] = leaf
+	f.activate(t)
+
+	in := fullInput()
+	in.Attributes = json.RawMessage(`{}`)
+	l, err := f.svc.Create(ctx, "ana", in, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.listings.photos[l.ID] = 3
+	if _, err := f.svc.Submit(ctx, "ana", l.ID, l.Version, ""); !errors.Is(err, domain.ErrListingAttributes) {
+		t.Fatalf("la marca que pide Construcción es obligatoria en Rotomartillo: %v", err)
+	}
+}
+
+func TestPublicCatalogUsesEffectiveSchemas(t *testing.T) {
+	tree := withEffectiveSchemas([]domain.Category{{
+		ID: "c1", AttributesSchema: json.RawMessage(`{"type":"object","properties":{"marca":{"type":"string"}}}`),
+		Children: []domain.Category{{ID: "t1", ParentID: "c1", AttributesSchema: json.RawMessage(`{"type":"object","properties":{}}`)}},
+	}})
+	if !strings.Contains(string(tree[0].Children[0].AttributesSchema), "marca") {
+		t.Fatalf("el tipo trae los atributos de su raíz: %s", tree[0].Children[0].AttributesSchema)
 	}
 }
