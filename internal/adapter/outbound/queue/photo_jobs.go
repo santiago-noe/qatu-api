@@ -14,6 +14,9 @@ import (
 // TaskProcessPhoto procesa una foto recién subida (tamaños sin EXIF). Lo atiende inbound/worker.
 const TaskProcessPhoto = "photo:process"
 
+// TaskCleanupPhotos borra las subidas abandonadas; lo programa inbound/worker cada hora.
+const TaskCleanupPhotos = "photo:cleanup"
+
 // PhotoPayload es el contenido de TaskProcessPhoto.
 type PhotoPayload struct {
 	PhotoID string `json:"photo_id"`
