@@ -45,6 +45,15 @@ func TestListingSchemaConstraints(t *testing.T) {
 	checkViolation("zona de otra ciudad",
 		`UPDATE tool_listings SET zone_id = $2, city_id = gen_random_uuid() WHERE id = $1`, "23503", listingID, zoneID)
 
+	// Un borrador incompleto se archiva; una rechazada se corrige de a pocos (0008).
+	var incomplete string
+	must(t, db.Pool.QueryRow(ctx, `
+		INSERT INTO tool_listings (owner_id, category_id, city_id, title) VALUES ($1, $2, $3, 'Borrador a medias')
+		RETURNING id`, userID, categoryID, cityID).Scan(&incomplete))
+	must(t, execErr(db, ctx, `UPDATE tool_listings SET status = 'archived' WHERE id = $1`, incomplete))
+	must(t, execErr(db, ctx, `UPDATE tool_listings SET status = 'rejected', rejection_reason = 'x' WHERE id = $1`, incomplete))
+	checkViolation("pausar incompleta", `UPDATE tool_listings SET status = 'paused' WHERE id = $1`, "23514", incomplete)
+
 	// Completa: sí se publica.
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE tool_listings SET zone_id = $2, price_day = 3500, replacement_value = 45000, deposit = 14000,
@@ -71,7 +80,7 @@ func TestListingSchemaConstraints(t *testing.T) {
 	}
 }
 
-// La 0006 se puede revertir sin dejar restos (tablas, ajustes ni el propósito de consentimiento).
+// La 0006 se puede revertir (con las posteriores) sin dejar restos (tablas, ajustes ni el propósito de consentimiento).
 func TestListingMigrationIsReversible(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
