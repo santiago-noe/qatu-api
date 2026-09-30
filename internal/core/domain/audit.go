@@ -31,7 +31,13 @@ const (
 	// Catálogo y configuración (feature 002).
 	AuditCategoryCreated   = "catalog.category_created"
 	AuditCategoryUpdated   = "catalog.category_updated"
+	AuditCityCreated       = "catalog.city_created"
 	AuditCityUpdated       = "catalog.city_updated"
+	AuditZoneCreated       = "catalog.zone_created"
+	AuditZoneUpdated       = "catalog.zone_updated"
 	AuditCategoryCityScope = "catalog.category_city_scope"
 	AuditSettingChanged    = "platform.setting_changed"
+
+	// Al prohibir una categoría, sus publicaciones activas salen del catálogo (spec 002).
+	AuditListingsRetired = "listing.retired_prohibited_category"
 )
