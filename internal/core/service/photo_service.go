@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 
 	"github.com/santiago-noe/qatu-api/internal/core/domain"
 	"github.com/santiago-noe/qatu-api/internal/core/port"
@@ -17,6 +18,7 @@ type PhotoDeps struct {
 	Jobs     port.PhotoJobs
 	Images   port.ImageProcessor
 	IDs      port.IDGenerator
+	Clock    port.Clock
 }
 
 // PhotoView es una foto con la dirección de cada tamaño (vacío mientras se procesa).
@@ -208,6 +210,23 @@ func (s *PhotoService) List(ctx context.Context, ownerID, listingID string) ([]P
 	if err != nil {
 		return nil, err
 	}
+	return s.views(ctx, photos)
+}
+
+// PublicPhotos son las fotos públicas listas, en orden: lo que ven moderación y, en la ficha, el
+// público. La placa nunca sale por aquí.
+func (s *PhotoService) PublicPhotos(ctx context.Context, listingID string) ([]PhotoView, error) {
+	photos, err := s.d.Photos.ListPhotos(ctx, listingID)
+	if err != nil {
+		return nil, err
+	}
+	public := slices.DeleteFunc(photos, func(p domain.ListingPhoto) bool {
+		return p.Kind != domain.PhotoPublic || p.Status != domain.PhotoReady
+	})
+	return s.views(ctx, public)
+}
+
+func (s *PhotoService) views(ctx context.Context, photos []domain.ListingPhoto) ([]PhotoView, error) {
 	out := make([]PhotoView, len(photos))
 	for i, p := range photos {
 		out[i] = PhotoView{Photo: p, URLs: map[int]string{}}
@@ -228,6 +247,24 @@ func (s *PhotoService) List(ctx context.Context, ownerID, listingID string) ([]P
 		}
 	}
 	return out, nil
+}
+
+// staleBatch: cuántas subidas abandonadas se limpian por pasada (la tarea corre cada hora).
+const staleBatch = 200
+
+// CleanupStale borra las subidas pedidas que nunca se completaron (ocupan lugar entre las 12 fotos
+// y pueden dejar un original a medias). Devuelve cuántas borró.
+func (s *PhotoService) CleanupStale(ctx context.Context) (int, error) {
+	stale, err := s.d.Photos.ListStalePending(ctx, s.d.Clock.Now().Add(-domain.StalePhotoAge), staleBatch)
+	if err != nil {
+		return 0, err
+	}
+	for i, p := range stale {
+		if err := s.remove(ctx, p); err != nil {
+			return i, err
+		}
+	}
+	return len(stale), nil
 }
 
 // Delete quita una foto. Una publicación visible no puede quedar con menos de 3 fotos públicas.

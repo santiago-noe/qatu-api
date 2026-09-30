@@ -37,8 +37,21 @@ func (m *memoryPhotos) FindPhoto(_ context.Context, id string) (domain.ListingPh
 	return p, nil
 }
 
+func (m *memoryPhotos) ListStalePending(_ context.Context, before time.Time, limit int) ([]domain.ListingPhoto, error) {
+	var out []domain.ListingPhoto
+	for _, p := range m.photos {
+		if p.Status == domain.PhotoPending && p.CreatedAt.Before(before) && len(out) < limit {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 func (m *memoryPhotos) CreatePhoto(_ context.Context, p domain.ListingPhoto) error {
 	p.SortOrder = len(m.photos)
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = time.Now()
+	}
 	m.photos[p.ID] = p
 	return nil
 }
@@ -169,7 +182,7 @@ func newPhotoFixture() photoFixture {
 	f := photoFixture{listings: listings, photos: &memoryPhotos{photos: map[string]domain.ListingPhoto{}},
 		storage: &memoryStorage{objects: map[string][]byte{}}, jobs: &recordingJobs{}, listing: l}
 	f.svc = NewPhotoService(PhotoDeps{Listings: listings, Photos: f.photos, Storage: f.storage, Jobs: f.jobs,
-		Images: fakeImages{}, IDs: &seqIDs{}})
+		Images: fakeImages{}, IDs: &seqIDs{}, Clock: &fakeClock{now: time.Now()}})
 	return f
 }
 
