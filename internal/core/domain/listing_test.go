@@ -262,3 +262,29 @@ func TestDuplicateListing(t *testing.T) {
 		t.Fatal("conserva precios y punto de recojo")
 	}
 }
+
+func TestApplyListingAction(t *testing.T) {
+	now := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	rejected := validListing()
+	rejected.Status, rejected.RejectionReason = ListingRejected, "Fotos borrosas"
+
+	l, err := ApplyListingAction(rejected, ListingSubmit, true, now)
+	if err != nil || l.Status != ListingInReview || l.RejectionReason != "" || l.FirstPublishedAt != nil {
+		t.Fatalf("corregida vuelve a revisión sin el motivo viejo: %+v, %v", l, err)
+	}
+	l, err = ApplyListingAction(l, ListingApprove, false, now)
+	if err != nil || l.Status != ListingPublished || l.FirstPublishedAt == nil || !l.FirstPublishedAt.Equal(now) {
+		t.Fatalf("aprobada queda fechada: %+v, %v", l, err)
+	}
+	l.Status = ListingPaused
+	again, _ := ApplyListingAction(l, ListingResume, false, now.Add(time.Hour))
+	if !again.FirstPublishedAt.Equal(now) {
+		t.Fatal("la fecha de la primera publicación no cambia")
+	}
+	if _, err := ApplyListingAction(l, ListingApprove, false, now); !errors.Is(err, ErrListingTransition) {
+		t.Fatal("una pausada no se aprueba")
+	}
+	if rejected.RejectionReason != "Fotos borrosas" {
+		t.Fatal("no modifica la publicación original")
+	}
+}
