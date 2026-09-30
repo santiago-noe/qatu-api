@@ -1,0 +1,13 @@
+{
+  "identities": [
+    {
+      "name": "qatu-api",
+      "credentials": [{ "accessKey": "qatu-dev", "secretKey": "qatu-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    },
+    {
+      "name": "anonymous",
+      "actions": ["Read:qatu-public"]
+    }
+  ]
+}

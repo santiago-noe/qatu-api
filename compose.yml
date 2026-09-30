@@ -35,9 +35,26 @@ services:
       timeout: 3s
       retries: 10
     networks: [svc]
+  # Almacenamiento S3 de desarrollo (fotos de publicaciones, feature 003). En producción es
+  # Cloudflare R2. MinIO ya no publica imágenes: SeaweedFS da la misma API S3.
+  # Solo el bucket qatu-public se lee sin credenciales (dev/seaweedfs-s3.json).
+  storage:
+    image: chrislusf/seaweedfs:4.48
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -s3.allowedOrigins=http://localhost:3000
+    ports: ["8333:8333"]
+    volumes:
+      - qatu_storage:/data
+      - ./dev/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8333/status || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [svc]
 volumes:
   qatu_pgdata:
   qatu_redisdata:
+  qatu_storage:
 networks:
   svc:
     external: true
