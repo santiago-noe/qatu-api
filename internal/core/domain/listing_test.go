@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNextListingStatus(t *testing.T) {
@@ -205,5 +206,59 @@ func TestCheckListingCategory(t *testing.T) {
 		if err := CheckListingCategory(l, r); !errors.Is(err, tt.want) {
 			t.Errorf("%s: quiero %v, llegó %v", tt.name, tt.want, err)
 		}
+	}
+}
+
+func TestDepositRuleFromSnapshot(t *testing.T) {
+	all := []Setting{
+		{ID: "1", Key: "listings.deposit_high_bps", Value: []byte("5000")},
+		{ID: "2", Key: SettingDepositMinFactor, Value: []byte("5000")},
+		{ID: "3", Key: SettingDepositMaxFactor, Value: []byte("15000")},
+		{ID: "4", Key: SettingPublicRadius, Value: []byte("500")},
+	}
+	snap, err := TakeSettingsSnapshot(all, ListingSettingKeys(RiskHigh), SettingScope{}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule, err := DepositRuleFrom(snap, RiskHigh)
+	if err != nil || rule != (DepositRule{PercentBps: 5000, MinFactorBps: 5000, MaxFactorBps: 15000}) {
+		t.Fatalf("DepositRuleFrom = %+v, %v", rule, err)
+	}
+	if _, err := DepositRuleFrom(snap, RiskLow); !errors.Is(err, ErrSettingMissing) {
+		t.Fatal("otra categoría de riesgo necesita su propio %")
+	}
+
+	l := validListing() // valor S/ 450: con 50 % se sugieren S/ 230 (rango 120 a 350)
+	for deposit, ok := range map[Cents]bool{230_00: true, 120_00: true, 350_00: true, 110_00: false, 360_00: false} {
+		l.Deposit = deposit
+		if err := CheckDeposit(l, rule); (err == nil) != ok {
+			t.Errorf("garantía %d: %v", deposit, err)
+		}
+	}
+	l.ReplacementValue = 0
+	if CheckDeposit(l, rule) != nil {
+		t.Fatal("sin valor de reposición aún no se revisa (borrador)")
+	}
+}
+
+func TestDuplicateListing(t *testing.T) {
+	now := time.Now()
+	here := GeoPoint{Lat: -13.16, Lng: -74.22}
+	l := validListing()
+	l.ID, l.Status, l.Version, l.RejectionReason, l.PublicLocation, l.FirstPublishedAt = "l1", ListingPublished, 7, "x", &here, &now
+	l.Title = strings.Repeat("a", ListingTitleMax)
+	copy := DuplicateListing(l)
+	if copy.ID != "" || copy.Status != ListingDraft || copy.Version != 0 || copy.PublicLocation != nil || copy.FirstPublishedAt != nil || copy.RejectionReason != "" {
+		t.Fatalf("la copia es un borrador nuevo: %+v", copy)
+	}
+	if !strings.HasSuffix(copy.Title, " (copia)") || len([]rune(copy.Title)) != ListingTitleMax {
+		t.Fatalf("título recortado para que quepa «(copia)»: %q", copy.Title)
+	}
+	copy.Accessories[0] = "cambiado"
+	if l.Accessories[0] == "cambiado" {
+		t.Fatal("la copia no comparte listas con el original")
+	}
+	if copy.PickupLocation != l.PickupLocation || copy.Prices != l.Prices {
+		t.Fatal("conserva precios y punto de recojo")
 	}
 }
