@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Qatu API
-  version: 0.2.0
+  version: 0.3.0
   summary: Marketplace de alquiler de herramientas y servicios en Ayacucho.
   description: |
-    API REST de qatu-api (Go, Fiber). Cubre las features 001 (cuentas e identidad) y
-    002 (catálogo y ubicación). qatu-app la usa siempre a través de su BFF; el navegador
+    API REST de qatu-api (Go, Fiber). Cubre las features 001 (cuentas e identidad),
+    002 (catálogo y ubicación) y 003 (publicaciones de herramientas). qatu-app la usa siempre a través de su BFF; el navegador
     nunca la llama directo.
 
     **Sesión.** El login devuelve un token opaco. qatu-app lo guarda en una cookie httpOnly;
@@ -29,6 +29,8 @@ tags:
     description: Feature 001. Registro, sesión, correo, contraseña, Google y segundo paso.
   - name: Mi cuenta
     description: Feature 001. Perfil, contraseña, sesiones y ubicación de la persona.
+  - name: Arrendador
+    description: Feature 003. Perfil de arrendador, publicaciones propias y su calendario.
   - name: Catálogo público
     description: Feature 002. Sin sesión y con caché (se invalida al editar desde el admin).
   - name: Admin · Usuarios
@@ -418,6 +420,307 @@ paths:
                 required: [location]
                 properties:
                   location: { $ref: "#/components/schemas/Location" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /me/lender:
+    get:
+      operationId: getLender
+      tags: [Arrendador]
+      summary: Mi perfil de arrendador
+      responses:
+        "200":
+          description: "`lender` es null si aún no lo activó."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lender]
+                properties:
+                  lender:
+                    oneOf:
+                      - $ref: "#/components/schemas/Lender"
+                      - type: "null"
+    put:
+      operationId: saveLender
+      tags: [Arrendador]
+      summary: Activar o editar mi perfil de arrendador
+      description: |
+        Exige el correo verificado. La primera vez pide `accept_terms` (queda el consentimiento
+        versionado) y da el rol `lender`. El celular es privado: solo se revela a la otra parte
+        tras confirmar una reserva.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, phone, city, zone]
+              properties:
+                kind: { type: string, enum: [person, business] }
+                business_name: { type: string, minLength: 2, maxLength: 80, description: Obligatorio para negocios. }
+                phone: { type: string, examples: ["987 654 321"], description: "Celular peruano; se guarda como +519XXXXXXXX." }
+                city: { type: string, examples: [ayacucho] }
+                zone: { type: string, examples: [carmen-alto] }
+                accept_terms: { type: boolean }
+      responses:
+        "200":
+          description: Guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lender]
+                properties:
+                  lender: { $ref: "#/components/schemas/Lender" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/lender/deposit-suggestion:
+    get:
+      operationId: depositSuggestion
+      tags: [Arrendador]
+      summary: Garantía sugerida y su rango
+      description: "Porcentaje del valor de reposición según el riesgo de la categoría, redondeado a S/ 10; se puede ajustar entre el mínimo y el máximo."
+      parameters:
+        - { name: category, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: value, in: query, required: true, description: Valor de reposición en céntimos., schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: OK (céntimos).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggested, min, max]
+                properties:
+                  suggested: { type: integer }
+                  min: { type: integer }
+                  max: { type: integer }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings:
+    get:
+      operationId: listMyListings
+      tags: [Arrendador]
+      summary: Mis publicaciones
+      responses:
+        "200":
+          description: De la más reciente a la más antigua.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listings]
+                properties:
+                  listings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Listing" }
+    post:
+      operationId: createListing
+      tags: [Arrendador]
+      summary: Crear un borrador
+      description: |
+        Pide el perfil de arrendador y un tipo de herramienta publicable en su ciudad. Lo que falte
+        de las reglas (modo de reserva, cancelación, verificación, duraciones) toma valores por defecto.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingFields" }
+      responses:
+        "201":
+          description: Borrador creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Listing" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}:
+    get:
+      operationId: getMyListing
+      tags: [Arrendador]
+      summary: Una de mis publicaciones (con el punto exacto)
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: updateListing
+      tags: [Arrendador]
+      summary: Guardar el formulario completo
+      description: |
+        Con la `version` leída (bloqueo optimista: 409 `version_desactualizada` si cambió). En
+        revisión o archivada no se edita. Publicada o pausada debe seguir completa y no cambia de
+        categoría. Editar precios no afecta reservas ya hechas.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ListingFields"
+                - type: object
+                  required: [version]
+                  properties:
+                    version: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/submit:
+    post:
+      operationId: submitListing
+      tags: [Arrendador]
+      summary: Enviar a publicar
+      description: |
+        Revisa atributos (JSON Schema de la categoría), garantía en rango, al menos 3 fotos listas y
+        una forma de entrega. Va a revisión si es la primera del arrendador, si la categoría es de
+        riesgo alto o si la habían rechazado; si no, se publica.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/pause:
+    post:
+      operationId: pauseListing
+      tags: [Arrendador]
+      summary: Pausar una publicada
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/resume:
+    post:
+      operationId: resumeListing
+      tags: [Arrendador]
+      summary: Reanudar una pausada
+      description: Solo si su categoría sigue permitida en la ciudad.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/archive:
+    post:
+      operationId: archiveListing
+      tags: [Arrendador]
+      summary: Archivar (sale del catálogo para siempre)
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/duplicate:
+    post:
+      operationId: duplicateListing
+      tags: [Arrendador]
+      summary: Duplicar como borrador (otra unidad del mismo modelo)
+      description: No copia fotos, calendario ni estado; el punto público sale del ID nuevo.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "201":
+          description: Borrador nuevo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Listing" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/availability:
+    get:
+      operationId: listingCalendar
+      tags: [Arrendador]
+      summary: Bloqueos del calendario en una ventana (hasta 13 meses)
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [blocks]
+                properties:
+                  blocks:
+                    type: array
+                    items: { $ref: "#/components/schemas/AvailabilityBlock" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: blockDates
+      tags: [Arrendador]
+      summary: Bloquear fechas
+      description: "El fin no se incluye. 409 `fechas_ocupadas` si se cruza con otro bloqueo o una reserva."
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start, end]
+              properties:
+                start: { type: string, format: date-time }
+                end: { type: string, format: date-time }
+                note: { type: string, maxLength: 200 }
+      responses:
+        "201":
+          description: Bloqueado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilityBlock" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/availability/{block}:
+    delete:
+      operationId: unblockDates
+      tags: [Arrendador]
+      summary: Quitar un bloqueo manual
+      description: Las reservas no se quitan desde el calendario.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+        - { name: block, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Quitado. }
         "404": { $ref: "#/components/responses/Error" }
 
   /catalog/categories:
@@ -953,13 +1256,35 @@ components:
       required: true
       schema: { type: string }
       example: ayacucho
+    ListingId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     CategoryId:
       name: id
       in: path
       required: true
       schema: { type: string, format: uuid }
 
+  requestBodies:
+    Version:
+      required: true
+      description: La versión leída (bloqueo optimista).
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [version]
+            properties:
+              version: { type: integer }
+
   responses:
+    Listing:
+      description: La publicación con su nuevo estado.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Listing" }
     Error:
       description: Error con código estable.
       content:
@@ -1014,6 +1339,100 @@ components:
         status: { type: string, enum: [active, suspended, deleted] }
         verification_level: { type: integer, minimum: 0, maximum: 2 }
         can_transact: { type: boolean }
+
+    Lender:
+      type: object
+      required: [kind, phone, city, zone]
+      properties:
+        kind: { type: string, enum: [person, business] }
+        business_name: { type: string }
+        phone: { type: string, examples: ["+51987654321"] }
+        city: { $ref: "#/components/schemas/PlaceRef" }
+        zone: { $ref: "#/components/schemas/PlaceRef" }
+
+    PlaceRef:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+
+    Prices:
+      type: object
+      description: "Céntimos; 0 = esa modalidad no se ofrece. El precio por día es obligatorio para publicar."
+      properties:
+        hour: { type: integer, minimum: 0 }
+        day: { type: integer, minimum: 0 }
+        weekend: { type: integer, minimum: 0 }
+        week: { type: integer, minimum: 0 }
+        month: { type: integer, minimum: 0 }
+
+    ListingFields:
+      type: object
+      required: [category_id, title]
+      description: Formulario del asistente. Montos en céntimos (PEN).
+      properties:
+        category_id: { type: string, format: uuid, description: Un tipo de herramienta (segundo nivel). }
+        title: { type: string, minLength: 5, maxLength: 80 }
+        description: { type: string, maxLength: 2000 }
+        attributes: { type: object, description: Según el JSON Schema de la categoría (se valida al enviar). }
+        replacement_value: { type: integer, minimum: 0, maximum: 10000000 }
+        deposit: { type: integer, minimum: 0, description: Dentro del rango de /me/lender/deposit-suggestion. }
+        prices: { $ref: "#/components/schemas/Prices" }
+        accessories: { type: array, maxItems: 30, items: { type: string, maxLength: 80 } }
+        usage_instructions: { type: string, maxLength: 2000 }
+        pickup_enabled: { type: boolean }
+        pickup_location:
+          description: "Punto exacto, privado. Obligatorio con recojo; debe caer en la ciudad del arrendador."
+          oneOf:
+            - $ref: "#/components/schemas/GeoPoint"
+            - type: "null"
+        delivery_enabled: { type: boolean }
+        delivery_fee: { type: integer, minimum: 0 }
+        delivery_zone_ids: { type: array, items: { type: string, format: uuid }, description: "IDs de /cities/{slug}/zones." }
+        booking_mode: { type: string, enum: [request, instant] }
+        cancel_policy: { type: string, enum: [flexible, moderate, strict] }
+        min_verification: { type: integer, minimum: 0, maximum: 2, description: Nunca menor al que pide el riesgo de la categoría. }
+        min_notice_hours: { type: integer, minimum: 0, maximum: 168 }
+        min_duration_hours: { type: integer, minimum: 1, maximum: 720 }
+        max_duration_hours: { type: integer, minimum: 1, maximum: 2160 }
+
+    ListingStatus:
+      type: string
+      enum: [draft, in_review, published, paused, rejected, archived]
+
+    Listing:
+      allOf:
+        - $ref: "#/components/schemas/ListingFields"
+        - type: object
+          required: [id, city_id, status, version, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            city_id: { type: string, format: uuid }
+            zone_id: { type: string, format: uuid }
+            public_location:
+              description: Punto desplazado de forma determinista dentro de public_radius_m; lo que ve el público.
+              oneOf:
+                - $ref: "#/components/schemas/GeoPoint"
+                - type: "null"
+            public_radius_m: { type: integer }
+            status: { $ref: "#/components/schemas/ListingStatus" }
+            rejection_reason: { type: string }
+            first_published_at: { type: string, format: date-time }
+            version: { type: integer }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+
+    AvailabilityBlock:
+      type: object
+      required: [id, start, end, reason]
+      properties:
+        id: { type: string, format: uuid }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time, description: No incluido. }
+        reason: { type: string, enum: [manual, booking, hold] }
+        note: { type: string }
 
     AdminUser:
       allOf:
