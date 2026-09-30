@@ -17,6 +17,8 @@ type Config struct {
 	Redis     RedisConfig     `mapstructure:"redis"`
 	Session   SessionConfig   `mapstructure:"session"`
 	Legal     LegalConfig     `mapstructure:"legal"`
+	Storage   StorageConfig   `mapstructure:"storage"`
+	Worker    WorkerConfig    `mapstructure:"worker"`
 	SMTP      SMTPConfig      `mapstructure:"smtp"`
 	Security  SecurityConfig  `mapstructure:"security"`
 	Codes     CodesConfig     `mapstructure:"codes"`
@@ -64,6 +66,27 @@ type LegalConfig struct {
 	PrivacyVersion string `mapstructure:"privacy_version"`
 	// LenderTermsVersion: condiciones que se aceptan al activar el perfil de arrendador (003).
 	LenderTermsVersion string `mapstructure:"lender_terms_version"`
+}
+
+// StorageConfig: almacenamiento S3 de las fotos (SeaweedFS en local, Cloudflare R2 en producción).
+type StorageConfig struct {
+	Endpoint      string `mapstructure:"endpoint"` // host:puerto, sin esquema
+	AccessKey     string `mapstructure:"access_key"`
+	SecretKey     string `mapstructure:"secret_key"`
+	UseSSL        bool   `mapstructure:"use_ssl"`
+	Region        string `mapstructure:"region"`
+	PublicBucket  string `mapstructure:"public_bucket"`
+	PrivateBucket string `mapstructure:"private_bucket"`
+	// PublicBaseURL antecede la clave de cada foto pública (en R2, el dominio propio del bucket).
+	PublicBaseURL string `mapstructure:"public_base_url"`
+	// CreateBuckets crea los buckets al arrancar (solo desarrollo).
+	CreateBuckets bool `mapstructure:"create_buckets"`
+}
+
+// WorkerConfig: trabajos en segundo plano (procesar fotos) dentro del mismo proceso.
+type WorkerConfig struct {
+	Enabled     bool `mapstructure:"enabled"`
+	Concurrency int  `mapstructure:"concurrency"`
 }
 
 type SMTPConfig struct {
@@ -154,6 +177,17 @@ var defaults = map[string]any{
 	"google.client_secret":               "",
 	"google.redirect_url":                "http://localhost:3000/api/auth/google/callback",
 	"google.state_ttl":                   "10m",
+	"storage.endpoint":                   "localhost:8333",
+	"storage.access_key":                 "qatu-dev",
+	"storage.secret_key":                 "qatu-dev-secret",
+	"storage.use_ssl":                    false,
+	"storage.region":                     "us-east-1",
+	"storage.public_bucket":              "qatu-public",
+	"storage.private_bucket":             "qatu-private",
+	"storage.public_base_url":            "http://localhost:8333/qatu-public",
+	"storage.create_buckets":             true,
+	"worker.enabled":                     true,
+	"worker.concurrency":                 2,
 }
 
 func Load() (Config, error) {
@@ -178,6 +212,8 @@ func Load() (Config, error) {
 			{"APP__TURNSTILE__SECRET", cfg.Turnstile.Secret},
 			{"APP__GOOGLE__CLIENT_ID", cfg.Google.ClientID},
 			{"APP__GOOGLE__CLIENT_SECRET", cfg.Google.ClientSecret},
+			{"APP__STORAGE__ACCESS_KEY", devOnly(cfg.Storage.AccessKey, "storage.access_key")},
+			{"APP__STORAGE__SECRET_KEY", devOnly(cfg.Storage.SecretKey, "storage.secret_key")},
 		} {
 			if s.value == "" {
 				return Config{}, fmt.Errorf("config: %s es obligatorio en producción", s.env)
@@ -197,6 +233,14 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("config: APP__HTTP__PORT inválido: %d", cfg.HTTP.Port)
 	}
 	return cfg, nil
+}
+
+// devOnly trata como ausente un valor igual al de desarrollo (credenciales locales conocidas).
+func devOnly(value, key string) string {
+	if value == defaults[key] {
+		return ""
+	}
+	return value
 }
 
 func (c Config) IsProduction() bool { return c.Env == "production" }
