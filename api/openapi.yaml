@@ -33,6 +33,8 @@ tags:
     description: Feature 003. Perfil de arrendador, publicaciones propias y su calendario.
   - name: Catálogo público
     description: Feature 002. Sin sesión y con caché (se invalida al editar desde el admin).
+  - name: Moderación
+    description: Feature 003. Roles moderator y admin, con segundo paso.
   - name: Admin · Usuarios
     description: Buscar cuentas, roles internos y suspensiones (feature 001).
   - name: Admin · Catálogo
@@ -945,6 +947,70 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /moderation/listings:
+    get:
+      operationId: moderationQueue
+      tags: [Moderación]
+      summary: Publicaciones en revisión
+      description: |
+        La que más espera primero (hasta 100). Con la categoría (riesgo y esquema de atributos), el
+        arrendador (nombre y si es su primera publicación) y las fotos públicas. Nunca el punto
+        exacto de recojo ni la foto de la placa.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listings]
+                properties:
+                  listings:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReviewItem" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /moderation/listings/{id}/approve:
+    post:
+      operationId: approveListing
+      tags: [Moderación]
+      summary: Aprobar (se publica)
+      description: Nadie modera sus propias publicaciones. Se avisa al arrendador por correo.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Listing" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /moderation/listings/{id}/reject:
+    post:
+      operationId: rejectListing
+      tags: [Moderación]
+      summary: Rechazar con motivo
+      description: El arrendador lee el motivo, corrige y vuelve a enviar (vuelve a revisión).
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, reason]
+              properties:
+                version: { type: integer }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        "200": { $ref: "#/components/responses/Listing" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
   /admin/users:
     get:
       operationId: adminFindUser
@@ -1576,6 +1642,29 @@ components:
           type: object
           description: Por ancho ("320", "800", "1600"); vacío mientras se procesa.
           additionalProperties: { type: string, format: uri }
+
+    ReviewItem:
+      type: object
+      required: [listing, owner, category, photos]
+      properties:
+        listing: { $ref: "#/components/schemas/Listing" }
+        owner:
+          type: object
+          required: [name, first_listing]
+          properties:
+            name: { type: string }
+            first_listing: { type: boolean, description: Aún no tiene ninguna publicación aprobada. }
+        category:
+          type: object
+          required: [id, name, risk_level]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            risk_level: { $ref: "#/components/schemas/RiskLevel" }
+            attributes_schema: { type: object }
+        photos:
+          type: array
+          items: { $ref: "#/components/schemas/Photo" }
 
     AvailabilityBlock:
       type: object
