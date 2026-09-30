@@ -17,3 +17,9 @@ type CatalogReader interface {
 	// LocationAt devuelve la ciudad y la zona que contienen el punto, o domain.ErrOutOfCoverage.
 	LocationAt(ctx context.Context, p domain.GeoPoint) (domain.Location, error)
 }
+
+// SettingsReader lee platform_settings para resolver el valor que aplica a una transacción.
+// Implementación: Postgres (la tabla es pequeña: se lee entera).
+type SettingsReader interface {
+	ListSettings(ctx context.Context) ([]domain.Setting, error)
+}
