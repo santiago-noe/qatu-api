@@ -37,6 +37,8 @@ type ListingRepository interface {
 	OwnerHasPublished(ctx context.Context, ownerID string) (bool, error)
 	// ReadyPhotos cuenta las fotos públicas ya procesadas (la placa privada no cuenta).
 	ReadyPhotos(ctx context.Context, listingID string) (int, error)
+	// ReviewQueue devuelve las publicaciones en revisión, la que más espera primero.
+	ReviewQueue(ctx context.Context, limit int) ([]domain.ReviewItem, error)
 
 	// ListBlocks devuelve los bloqueos que tocan [from, to), en orden.
 	ListBlocks(ctx context.Context, listingID string, from, to time.Time) ([]domain.AvailabilityBlock, error)

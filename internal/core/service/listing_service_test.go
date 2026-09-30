@@ -96,6 +96,17 @@ func (m *memoryListings) ReadyPhotos(_ context.Context, id string) (int, error) 
 	return m.photos[id], nil
 }
 
+func (m *memoryListings) ReviewQueue(_ context.Context, limit int) ([]domain.ReviewItem, error) {
+	var out []domain.ReviewItem
+	for _, l := range m.listings {
+		if l.Status == domain.ListingInReview {
+			out = append(out, domain.ReviewItem{Listing: l, OwnerName: "Ana", FirstListing: !m.published[l.OwnerID]})
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.ReviewItem) int { return a.Listing.UpdatedAt.Compare(b.Listing.UpdatedAt) })
+	return out[:min(limit, len(out))], nil
+}
+
 func (m *memoryListings) ListBlocks(_ context.Context, id string, from, to time.Time) ([]domain.AvailabilityBlock, error) {
 	var out []domain.AvailabilityBlock
 	for _, b := range m.blocks {

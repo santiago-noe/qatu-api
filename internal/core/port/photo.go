@@ -53,6 +53,9 @@ type PhotoRepository interface {
 	DeletePhoto(ctx context.Context, photoID string) error
 	// ReorderPhotos pone sort_order según la posición de cada ID.
 	ReorderPhotos(ctx context.Context, listingID string, ids []string) error
+	// ListStalePending devuelve las fotos que siguen pendientes desde antes de before (subidas
+	// que nunca se completaron), como mucho limit.
+	ListStalePending(ctx context.Context, before time.Time, limit int) ([]domain.ListingPhoto, error)
 }
 
 // PhotoJobs encola el procesamiento de una foto recién subida. Implementación: asynq (Redis).

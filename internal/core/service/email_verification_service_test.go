@@ -78,6 +78,16 @@ type capturingMailer struct {
 	to, code string
 	purpose  domain.CodePurpose
 	sends    int
+	reviews  []port.ListingReviewEmail
+	down     bool // simula el SMTP caído
+}
+
+func (c *capturingMailer) SendListingReview(_ context.Context, e port.ListingReviewEmail) error {
+	if c.down {
+		return errors.New("smtp caído")
+	}
+	c.reviews = append(c.reviews, e)
+	return nil
 }
 
 func (c *capturingMailer) SendCode(_ context.Context, e port.CodeEmail) error {

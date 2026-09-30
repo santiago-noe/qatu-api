@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -72,6 +73,15 @@ func (r *PhotoRepository) ReorderPhotos(ctx context.Context, listingID string, i
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS o(id, pos)
 		WHERE p.id = o.id AND p.listing_id = $1`, listingID, ids)
 	return mapListingError(err)
+}
+
+func (r *PhotoRepository) ListStalePending(ctx context.Context, before time.Time, limit int) ([]domain.ListingPhoto, error) {
+	rows, err := r.db.Pool.Query(ctx, photoSelect+`
+		WHERE status = 'pending' AND created_at < $1 ORDER BY created_at LIMIT $2`, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.ListingPhoto, error) { return scanPhoto(row) })
 }
 
 func (r *PhotoRepository) exec(ctx context.Context, sql string, args ...any) error {

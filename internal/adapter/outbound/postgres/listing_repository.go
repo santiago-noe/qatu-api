@@ -58,15 +58,19 @@ const listingSelect = `
 	       l.created_at, l.updated_at
 	FROM tool_listings l`
 
-func scanListing(row pgx.Row) (domain.ToolListing, error) {
+func scanListing(row pgx.Row) (domain.ToolListing, error) { return scanListingWith(row) }
+
+// scanListingWith lee las columnas de listingSelect y, después, las extra que agregue la consulta.
+func scanListingWith(row pgx.Row, extra ...any) (domain.ToolListing, error) {
 	var l domain.ToolListing
 	var pickLat, pickLng, pubLat, pubLng *float64
-	err := row.Scan(&l.ID, &l.OwnerID, &l.CategoryID, &l.CityID, &l.ZoneID, &l.Title, &l.Description, &l.Attributes,
+	dest := []any{&l.ID, &l.OwnerID, &l.CategoryID, &l.CityID, &l.ZoneID, &l.Title, &l.Description, &l.Attributes,
 		&l.ReplacementValue, &l.Deposit, &l.Prices.Hour, &l.Prices.Day, &l.Prices.Weekend, &l.Prices.Week,
 		&l.Prices.Month, &l.Accessories, &l.UsageInstructions, &l.PickupEnabled, &pickLat, &pickLng, &pubLat,
 		&pubLng, &l.PublicRadiusM, &l.DeliveryEnabled, &l.DeliveryFee, &l.DeliveryZoneIDs, &l.BookingMode,
 		&l.CancelPolicy, &l.MinVerification, &l.MinNoticeHours, &l.MinDurationHours, &l.MaxDurationHours,
-		&l.Status, &l.RejectionReason, &l.FirstPublishedAt, &l.Version, &l.CreatedAt, &l.UpdatedAt)
+		&l.Status, &l.RejectionReason, &l.FirstPublishedAt, &l.Version, &l.CreatedAt, &l.UpdatedAt}
+	err := row.Scan(append(dest, extra...)...)
 	l.PickupLocation = point(pickLat, pickLng)
 	l.PublicLocation = point(pubLat, pubLng)
 	return l, err
@@ -216,6 +220,25 @@ func (r *ListingRepository) ReadyPhotos(ctx context.Context, listingID string) (
 		SELECT count(*) FROM listing_photos WHERE listing_id = $1 AND kind = 'public' AND status = 'ready'`,
 		listingID).Scan(&n)
 	return n, err
+}
+
+// ReviewQueue: la que lleva más tiempo en revisión primero (updated_at es cuando se envió: en
+// revisión el dueño no la puede editar). FirstListing: el dueño no tiene ninguna aprobada.
+func (r *ListingRepository) ReviewQueue(ctx context.Context, limit int) ([]domain.ReviewItem, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT q.*, u.name, NOT EXISTS (SELECT 1 FROM tool_listings p WHERE p.owner_id = q.owner_id AND p.first_published_at IS NOT NULL)
+		FROM (`+listingSelect+` WHERE l.status = 'in_review' ORDER BY l.updated_at, l.id LIMIT $1) q
+		JOIN users u ON u.id = q.owner_id
+		ORDER BY q.updated_at, q.id`, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.ReviewItem, error) {
+		var item domain.ReviewItem
+		l, err := scanListingWith(row, &item.OwnerName, &item.FirstListing)
+		item.Listing = l
+		return item, err
+	})
 }
 
 func (r *ListingRepository) ListBlocks(ctx context.Context, listingID string, from, to time.Time) ([]domain.AvailabilityBlock, error) {

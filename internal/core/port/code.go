@@ -27,7 +27,18 @@ type CodeEmail struct {
 	ValidFor time.Duration
 }
 
+// ListingReviewEmail avisa al arrendador el resultado de la moderación de su publicación.
+type ListingReviewEmail struct {
+	To       string
+	Name     string
+	Title    string
+	Approved bool
+	Reason   string // solo si se rechazó
+}
+
 // Mailer envía los correos transaccionales. Implementación: SMTP genérico.
 type Mailer interface {
 	SendCode(ctx context.Context, email CodeEmail) error
+	// SendListingReview es un aviso: hasta la feature 013 (notificaciones) es el único canal.
+	SendListingReview(ctx context.Context, email ListingReviewEmail) error
 }

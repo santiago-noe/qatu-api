@@ -96,6 +96,16 @@ func (m *Mailer) SendCode(ctx context.Context, e port.CodeEmail) error {
 	return m.send(ctx, e.To, texts.Subject+": "+e.Code, "code", data)
 }
 
+// SendListingReview avisa si la publicación se aprobó o se rechazó (con el motivo).
+func (m *Mailer) SendListingReview(ctx context.Context, e port.ListingReviewEmail) error {
+	subject := "Tu publicación ya está en Qatu: " + e.Title
+	if !e.Approved {
+		subject = "Revisa tu publicación en Qatu: " + e.Title
+	}
+	data := map[string]any{"Name": e.Name, "Title": e.Title, "Approved": e.Approved, "Reason": e.Reason}
+	return m.send(ctx, e.To, subject, "listing_review", data)
+}
+
 func (m *Mailer) send(ctx context.Context, to, subject, template string, data any) error {
 	rcpt, err := mail.ParseAddress(to)
 	if err != nil {

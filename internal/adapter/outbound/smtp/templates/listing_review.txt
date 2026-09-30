@@ -1,0 +1,11 @@
+Hola {{.Name}},
+{{if .Approved}}
+Revisamos tu publicación «{{.Title}}» y ya aparece en Qatu. Desde ahora pueden encontrarla y pedirte reservas.
+{{else}}
+Revisamos tu publicación «{{.Title}}» y necesita un cambio antes de aparecer en Qatu:
+
+{{.Reason}}
+
+Corrígela desde «Mis publicaciones» y vuelve a enviarla.
+{{end}}
+Equipo Qatu
