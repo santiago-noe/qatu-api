@@ -161,6 +161,20 @@ func TestListingRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("cola de moderación", func(t *testing.T) {
+		if q, err := repo.ReviewQueue(ctx, 10); err != nil || len(q) != 0 {
+			t.Fatalf("sin publicaciones en revisión: %+v, %v", q, err)
+		}
+		must(t, execErr(db, ctx, `UPDATE tool_listings SET status = 'in_review', first_published_at = NULL WHERE id = $1`, l.ID))
+		q, err := repo.ReviewQueue(ctx, 10)
+		if err != nil || len(q) != 1 || q[0].Listing.ID != l.ID || q[0].OwnerName != "Ana" || !q[0].FirstListing {
+			t.Fatalf("ReviewQueue = %+v, %v", q, err)
+		}
+		if q[0].Listing.Title == "" || q[0].Listing.Prices.Day != 35_00 {
+			t.Fatalf("trae la publicación completa: %+v", q[0].Listing)
+		}
+	})
+
 	t.Run("la base traduce sus rechazos", func(t *testing.T) {
 		var trade string
 		must(t, db.Pool.QueryRow(ctx, `SELECT id FROM categories WHERE slug = 'gasfiteria'`).Scan(&trade))
