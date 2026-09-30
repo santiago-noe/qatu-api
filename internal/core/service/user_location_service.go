@@ -26,21 +26,7 @@ func (s *UserLocationService) Get(ctx context.Context, userID string) (loc domai
 	if err != nil || user.CityID == "" {
 		return domain.Location{}, false, err
 	}
-	cities, err := s.catalog.Cities(ctx)
-	if err != nil {
-		return domain.Location{}, false, err
-	}
-	for _, city := range cities {
-		if city.ID != user.CityID {
-			continue
-		}
-		zone, found, err := s.findZone(ctx, city.Slug, func(z domain.Zone) bool { return z.ID == user.ZoneID })
-		if err != nil || !found {
-			return domain.Location{}, false, err
-		}
-		return domain.Location{City: city, Zone: zone}, true, nil
-	}
-	return domain.Location{}, false, nil
+	return locationByIDs(ctx, s.catalog, user.CityID, user.ZoneID)
 }
 
 // Set guarda la ciudad y el distrito elegidos (de la lista o detectados con /geo/zone).
