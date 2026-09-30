@@ -76,6 +76,13 @@ var domainErrors = []struct {
 	{domain.ErrCategoryTree, fiber.StatusUnprocessableEntity, "arbol_invalido"},
 	{domain.ErrUnknownSetting, fiber.StatusUnprocessableEntity, "ajuste_desconocido"},
 	{domain.ErrInvalidSettingValue, fiber.StatusUnprocessableEntity, "valor_invalido"},
+	{domain.ErrInvalidUbigeo, fiber.StatusUnprocessableEntity, "ubigeo_invalido"},
+	{domain.ErrCityTaken, fiber.StatusConflict, "ciudad_registrada"},
+	{domain.ErrZoneTaken, fiber.StatusConflict, "distrito_registrado"},
+	{domain.ErrInvalidBoundary, fiber.StatusUnprocessableEntity, "limite_invalido"},
+	{domain.ErrZoneFarFromCity, fiber.StatusUnprocessableEntity, "limite_lejano"},
+	{domain.ErrZoneOverlap, fiber.StatusConflict, "limite_superpuesto"},
+	{domain.ErrCityWithoutZones, fiber.StatusConflict, "ciudad_sin_distritos"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
