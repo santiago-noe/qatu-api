@@ -1,0 +1,1255 @@
+openapi: 3.1.0
+info:
+  title: Qatu API
+  version: 0.2.0
+  summary: Marketplace de alquiler de herramientas y servicios en Ayacucho.
+  description: |
+    API REST de qatu-api (Go, Fiber). Cubre las features 001 (cuentas e identidad) y
+    002 (catálogo y ubicación). qatu-app la usa siempre a través de su BFF; el navegador
+    nunca la llama directo.
+
+    **Sesión.** El login devuelve un token opaco. qatu-app lo guarda en una cookie httpOnly;
+    herramientas como Bruno lo envían en `Authorization: Bearer <token>`.
+
+    **Rutas internas** (`/admin/*`): sesión, rol `admin` y el segundo paso confirmado
+    (`POST /auth/two-factor/verify`). Sin el segundo paso responden 403 `dos_pasos_requerido`.
+
+    **Errores.** Siempre `{"error": "codigo", "message": "texto"}`: el código es estable
+    para la app y el mensaje, legible en español. Un 429 trae `Retry-After`.
+
+    **Dinero** en céntimos enteros (PEN); **porcentajes** en puntos básicos (1000 = 10 %).
+    **Coordenadas** en WGS 84; en GeoJSON el orden es longitud, latitud.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local (compose)
+tags:
+  - name: Salud
+    description: Estado de Postgres y Redis (para el orquestador).
+  - name: Autenticación
+    description: Feature 001. Registro, sesión, correo, contraseña, Google y segundo paso.
+  - name: Mi cuenta
+    description: Feature 001. Perfil, contraseña, sesiones y ubicación de la persona.
+  - name: Catálogo público
+    description: Feature 002. Sin sesión y con caché (se invalida al editar desde el admin).
+  - name: Admin · Usuarios
+    description: Buscar cuentas, roles internos y suspensiones (feature 001).
+  - name: Admin · Catálogo
+    description: Categorías y oficios, con su alcance por ciudad.
+  - name: Admin · Ciudades
+    description: Ciudades y distritos con su límite oficial.
+  - name: Admin · Ajustes
+    description: platform_settings (comisiones y reglas) con historial.
+
+security:
+  - session: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Salud]
+      summary: Estado de la API y sus dependencias
+      security: []
+      responses:
+        "200":
+          description: Todo arriba.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Alguna dependencia falla.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [Autenticación]
+      summary: Crear una cuenta
+      description: Envía el código de verificación al correo. Limitado por IP y con captcha.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Turnstile"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name, password, adult_declared, accept_legal]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string, maxLength: 120 }
+                password: { type: string, minLength: 10, maxLength: 128, description: "Frase; se revisa contra filtraciones conocidas." }
+                adult_declared: { type: boolean, description: Declara ser mayor de 18 años. }
+                accept_legal: { type: boolean, description: Acepta términos y política de privacidad (versionados). }
+      responses:
+        "201":
+          description: Cuenta creada y sesión abierta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Autenticación]
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Sesión abierta. Con `two_factor_required` la app pide el código antes del panel interno.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [Autenticación]
+      summary: Cerrar esta sesión
+      responses:
+        "204": { description: Cerrada. }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/logout-all:
+    post:
+      operationId: logoutAll
+      tags: [Autenticación]
+      summary: Cerrar todas las sesiones de la cuenta
+      responses:
+        "204": { description: Cerradas. }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/email/verify:
+    post:
+      operationId: verifyEmail
+      tags: [Autenticación]
+      summary: Confirmar el correo con el código de 6 dígitos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "200":
+          description: Correo confirmado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /auth/email/resend:
+    post:
+      operationId: resendEmailCode
+      tags: [Autenticación]
+      summary: Reenviar el código de verificación
+      responses:
+        "202": { description: El correo se envía (no se confirma la entrega). }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      tags: [Autenticación]
+      summary: Pedir un código para recuperar la contraseña
+      description: Siempre 202, exista o no la cuenta (no revela qué correos existen).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Turnstile"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202": { description: "Si la cuenta existe, se envía el código." }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/password/reset:
+    post:
+      operationId: resetPassword
+      tags: [Autenticación]
+      summary: Cambiar la contraseña con el código del correo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, password]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                password: { type: string, minLength: 10, maxLength: 128 }
+      responses:
+        "204": { description: Contraseña cambiada; se cerraron todas las sesiones. }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/google/start:
+    post:
+      operationId: startGoogle
+      tags: [Autenticación]
+      summary: Empezar el acceso con Google
+      description: El BFF guarda `state` en una cookie propia y lo compara en el callback.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                adult_declared: { type: boolean, description: Solo para crear una cuenta nueva. }
+                accept_legal: { type: boolean, description: Solo para crear una cuenta nueva. }
+      responses:
+        "200":
+          description: Dirección de Google a la que ir.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, state]
+                properties:
+                  url: { type: string, format: uri }
+                  state: { type: string }
+        "503": { $ref: "#/components/responses/Error" }
+
+  /auth/google/callback:
+    post:
+      operationId: finishGoogle
+      tags: [Autenticación]
+      summary: Terminar el acceso con Google
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+      responses:
+        "200":
+          description: Sesión abierta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /auth/two-factor/send:
+    post:
+      operationId: sendTwoFactorCode
+      tags: [Autenticación]
+      summary: Enviar el código del segundo paso (roles internos)
+      responses:
+        "202": { description: El correo se envía. }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/two-factor/verify:
+    post:
+      operationId: verifyTwoFactor
+      tags: [Autenticación]
+      summary: Confirmar el segundo paso
+      description: Desde aquí la sesión entra a las rutas internas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeRequest" }
+      responses:
+        "204": { description: Confirmado. }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [Mi cuenta]
+      summary: La cuenta de la sesión
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateMe
+      tags: [Mi cuenta]
+      summary: Cambiar el nombre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 120 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/password:
+    post:
+      operationId: changePassword
+      tags: [Mi cuenta]
+      summary: Cambiar o crear la contraseña
+      description: Cierra las demás sesiones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                current_password: { type: string, description: Vacío si la cuenta aún no tiene contraseña (entró con Google). }
+                new_password: { type: string, minLength: 10, maxLength: 128 }
+      responses:
+        "204": { description: Cambiada. }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/sessions:
+    get:
+      operationId: listSessions
+      tags: [Mi cuenta]
+      summary: Sesiones abiertas
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+
+  /me/sessions/{id}:
+    delete:
+      operationId: revokeSession
+      tags: [Mi cuenta]
+      summary: Cerrar una sesión
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Cerrada. }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /me/location:
+    get:
+      operationId: getMyLocation
+      tags: [Mi cuenta]
+      summary: Mi ciudad y distrito
+      responses:
+        "200":
+          description: "`location` es null si aún no eligió."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [location]
+                properties:
+                  location:
+                    oneOf:
+                      - $ref: "#/components/schemas/Location"
+                      - type: "null"
+    put:
+      operationId: setMyLocation
+      tags: [Mi cuenta]
+      summary: Elegir mi ciudad y distrito
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [city, zone]
+              properties:
+                city: { type: string, examples: [ayacucho] }
+                zone: { type: string, examples: [carmen-alto] }
+      responses:
+        "200":
+          description: Guardada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [location]
+                properties:
+                  location: { $ref: "#/components/schemas/Location" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /catalog/categories:
+    get:
+      operationId: listCategories
+      tags: [Catálogo público]
+      summary: Árbol de categorías u oficios publicables
+      description: Sin lo apagado ni lo prohibido. Con `city` aplica lo encendido o apagado en esa ciudad.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Vertical"
+        - { name: city, in: query, schema: { type: string }, example: ayacucho }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [categories]
+                properties:
+                  categories:
+                    type: array
+                    items: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /cities:
+    get:
+      operationId: listCities
+      tags: [Catálogo público]
+      summary: Ciudades habilitadas
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cities]
+                properties:
+                  cities:
+                    type: array
+                    items: { $ref: "#/components/schemas/City" }
+
+  /cities/{slug}/zones:
+    get:
+      operationId: listZones
+      tags: [Catálogo público]
+      summary: Distritos activos de una ciudad
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CitySlug"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [zones]
+                properties:
+                  zones:
+                    type: array
+                    items: { $ref: "#/components/schemas/Zone" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /geo/zone:
+    get:
+      operationId: zoneAt
+      tags: [Catálogo público]
+      summary: Ciudad y distrito de un punto
+      description: El punto no se guarda ni se registra; solo se usa para responder.
+      security: []
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 }, example: -13.1631 }
+        - { name: lng, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 }, example: -74.2236 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404":
+          description: "`fuera_de_cobertura`: el punto no cae en ningún distrito activo."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/users:
+    get:
+      operationId: adminFindUser
+      tags: [Admin · Usuarios]
+      summary: Buscar una cuenta por correo exacto
+      description: No hay listado masivo (datos mínimos, Ley 29733).
+      parameters:
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /admin/users/{id}:
+    get:
+      operationId: adminGetUser
+      tags: [Admin · Usuarios]
+      summary: Una cuenta
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /admin/users/{id}/roles:
+    patch:
+      operationId: adminChangeRoles
+      tags: [Admin · Usuarios]
+      summary: Dar o quitar roles internos
+      description: Solo support, moderator y admin; nadie se quita su propio rol admin.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                add: { type: array, items: { $ref: "#/components/schemas/Role" } }
+                remove: { type: array, items: { $ref: "#/components/schemas/Role" } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/users/{id}/status:
+    patch:
+      operationId: adminChangeStatus
+      tags: [Admin · Usuarios]
+      summary: Suspender o reactivar una cuenta
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+                reason: { type: string, description: Obligatorio al suspender. }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/catalog/categories:
+    get:
+      operationId: adminListCategories
+      tags: [Admin · Catálogo]
+      summary: Árbol completo de la vertical (también lo apagado y prohibido)
+      parameters:
+        - $ref: "#/components/parameters/Vertical"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [categories]
+                properties:
+                  categories:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminCategory" }
+    post:
+      operationId: adminCreateCategory
+      tags: [Admin · Catálogo]
+      summary: Crear una categoría, tipo u oficio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "201":
+          description: Creada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCategory" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/catalog/categories/{id}:
+    patch:
+      operationId: adminUpdateCategory
+      tags: [Admin · Catálogo]
+      summary: Editar una categoría
+      description: |
+        Solo cambian los campos enviados; la vertical no se edita. Al marcarla `prohibited`,
+        sus publicaciones activas (y las de sus tipos) salen del catálogo con un motivo y queda
+        auditado; nadie puede volver a publicarlas mientras siga prohibida.
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryPatch"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCategory" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/catalog/categories/{id}/cities:
+    get:
+      operationId: adminCategoryCities
+      tags: [Admin · Catálogo]
+      summary: Cómo está la categoría en cada ciudad
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      responses:
+        "200":
+          description: Todas las ciudades, también las apagadas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cities]
+                properties:
+                  cities:
+                    type: array
+                    items: { $ref: "#/components/schemas/CategoryCity" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /admin/catalog/categories/{id}/cities/{city}:
+    put:
+      operationId: adminSetCategoryCity
+      tags: [Admin · Catálogo]
+      summary: Encender o apagar la categoría solo en una ciudad
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+        - { name: city, in: path, required: true, schema: { type: string }, example: ayacucho }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: [boolean, "null"]
+                  description: null vuelve al valor general de la categoría.
+      responses:
+        "204": { description: Guardado. }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /admin/cities:
+    get:
+      operationId: adminListCities
+      tags: [Admin · Ciudades]
+      summary: Todas las ciudades (también las apagadas)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cities]
+                properties:
+                  cities:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminCity" }
+    post:
+      operationId: adminCreateCity
+      tags: [Admin · Ciudades]
+      summary: Dar de alta una ciudad
+      description: Nace apagada; se enciende cuando tiene al menos un distrito activo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name, region, center]
+              properties:
+                slug: { $ref: "#/components/schemas/Slug" }
+                name: { type: string, maxLength: 80 }
+                region: { type: string, maxLength: 80 }
+                ubigeo: { type: string, pattern: "^[0-9]{4}$", description: Ubigeo INEI de la provincia (opcional). }
+                center: { $ref: "#/components/schemas/GeoPoint" }
+      responses:
+        "201":
+          description: Creada (apagada).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCity" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/cities/{slug}:
+    patch:
+      operationId: adminUpdateCity
+      tags: [Admin · Ciudades]
+      summary: Editar una ciudad o encenderla y apagarla
+      description: El slug y el ubigeo no cambian. Encenderla sin distritos activos responde 409 `ciudad_sin_distritos`.
+      parameters:
+        - $ref: "#/components/parameters/CitySlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80 }
+                region: { type: string, maxLength: 80 }
+                center: { $ref: "#/components/schemas/GeoPoint" }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCity" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/cities/{slug}/zones:
+    get:
+      operationId: adminListZones
+      tags: [Admin · Ciudades]
+      summary: La ciudad y todos sus distritos, con el límite simplificado
+      parameters:
+        - $ref: "#/components/parameters/CitySlug"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [city, zones]
+                properties:
+                  city: { $ref: "#/components/schemas/AdminCity" }
+                  zones:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminZone" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: adminCreateZone
+      tags: [Admin · Ciudades]
+      summary: Agregar un distrito
+      description: |
+        El límite es opcional (sin él, el distrito se elige de la lista pero no se detecta por
+        ubicación). Se rechaza si no es un polígono válido (`limite_invalido`), si queda a más de
+        60 km del centro de la ciudad (`limite_lejano`, casi siempre latitud y longitud
+        invertidas) o si repite más del 1 % del área de otro distrito (`limite_superpuesto`).
+      parameters:
+        - $ref: "#/components/parameters/CitySlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { $ref: "#/components/schemas/Slug" }
+                name: { type: string, maxLength: 80 }
+                ubigeo: { type: string, pattern: "^[0-9]{6}$", description: Empieza con el ubigeo de la ciudad. }
+                sort_order: { type: integer, minimum: 0, maximum: 32767 }
+                enabled: { type: boolean, default: true }
+                boundary: { $ref: "#/components/schemas/BoundaryInput" }
+      responses:
+        "201":
+          description: Creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminZone" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/cities/{slug}/zones/{zone}:
+    patch:
+      operationId: adminUpdateZone
+      tags: [Admin · Ciudades]
+      summary: Editar un distrito o reemplazar su límite
+      description: No se puede apagar el último distrito activo de una ciudad encendida (409 `ciudad_sin_distritos`).
+      parameters:
+        - $ref: "#/components/parameters/CitySlug"
+        - { name: zone, in: path, required: true, schema: { type: string }, example: carmen-alto }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80 }
+                sort_order: { type: integer, minimum: 0, maximum: 32767 }
+                enabled: { type: boolean }
+                boundary: { $ref: "#/components/schemas/BoundaryInput" }
+      responses:
+        "200":
+          description: OK (sin el límite en la respuesta).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminZone" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/settings:
+    get:
+      operationId: adminListSettings
+      tags: [Admin · Ajustes]
+      summary: Todos los ajustes en todos sus alcances
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [settings]
+                properties:
+                  settings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Setting" }
+    put:
+      operationId: adminSetSetting
+      tags: [Admin · Ajustes]
+      summary: Crear o cambiar un ajuste en su alcance
+      description: |
+        Gana el alcance más específico: ciudad+categoría > categoría > ciudad+categoría padre >
+        categoría padre > ciudad > global. Cada transacción guarda una copia de los valores al
+        crearse, así que el cambio solo afecta a las nuevas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, value]
+              properties:
+                key: { $ref: "#/components/schemas/SettingKey" }
+                city: { type: string, description: Slug de la ciudad; vacío = todas. }
+                category_id: { type: string, format: uuid, description: Vacío = todas. }
+                value: { type: integer }
+                description: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Setting" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/settings/{key}/history:
+    get:
+      operationId: adminSettingHistory
+      tags: [Admin · Ajustes]
+      summary: Historial de cambios de una clave
+      parameters:
+        - { name: key, in: path, required: true, schema: { $ref: "#/components/schemas/SettingKey" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Del más reciente al más antiguo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [history]
+                properties:
+                  history:
+                    type: array
+                    items: { $ref: "#/components/schemas/SettingChange" }
+        "422": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    session:
+      type: http
+      scheme: bearer
+      description: Token de sesión de /auth/login (qatu-app lo envía en una cookie httpOnly).
+
+  parameters:
+    Turnstile:
+      name: X-Turnstile-Token
+      in: header
+      description: Token de Cloudflare Turnstile. En desarrollo, sin secreto configurado, no se exige.
+      schema: { type: string }
+    Vertical:
+      name: vertical
+      in: query
+      required: true
+      schema: { type: string, enum: [rental, service] }
+    CitySlug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string }
+      example: ayacucho
+    CategoryId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Error:
+      description: Error con código estable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: Demasiados intentos.
+      headers:
+        Retry-After:
+          description: Segundos a esperar.
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, examples: [limite_superpuesto] }
+        message: { type: string, examples: [el límite se superpone con otro distrito de la ciudad] }
+
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [up, down] }
+        components:
+          type: object
+          additionalProperties: { type: string, enum: [up, down] }
+
+    CodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: "^[0-9]{6}$" }
+
+    Role:
+      type: string
+      enum: [client, lender, provider, support, moderator, admin]
+
+    User:
+      type: object
+      required: [id, email_verified, name, roles, status, verification_level, can_transact]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        email_verified: { type: boolean }
+        name: { type: string }
+        avatar_url: { type: string, format: uri }
+        roles: { type: array, items: { $ref: "#/components/schemas/Role" } }
+        status: { type: string, enum: [active, suspended, deleted] }
+        verification_level: { type: integer, minimum: 0, maximum: 2 }
+        can_transact: { type: boolean }
+
+    AdminUser:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            suspended_reason: { type: string }
+
+    AuthResponse:
+      type: object
+      required: [session, user, two_factor_required]
+      properties:
+        session:
+          type: object
+          required: [token, expires_at]
+          properties:
+            token: { type: string }
+            expires_at: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/User" }
+        two_factor_required: { type: boolean }
+        verification_sent: { type: boolean, description: Solo en el registro. }
+
+    Session:
+      type: object
+      required: [id, provider, created_at, last_used_at, current]
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string, enum: [password, google, phone_otp] }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+        ip: { type: string }
+        user_agent: { type: string }
+        current: { type: boolean }
+
+    Slug:
+      type: string
+      pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+      examples: [san-juan-bautista]
+
+    GeoPoint:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+
+    City:
+      type: object
+      required: [slug, name, region, timezone, center]
+      properties:
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+        region: { type: string }
+        timezone: { type: string, examples: [America/Lima] }
+        center: { $ref: "#/components/schemas/GeoPoint" }
+
+    Zone:
+      type: object
+      required: [id, slug, name, detectable]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+        ubigeo: { type: string }
+        detectable: { type: boolean, description: Tiene límite y se detecta por la ubicación del navegador. }
+
+    Location:
+      type: object
+      required: [city, zone]
+      properties:
+        city: { $ref: "#/components/schemas/City" }
+        zone: { $ref: "#/components/schemas/Zone" }
+
+    RiskLevel:
+      type: string
+      enum: [low, medium, high]
+      description: Define la verificación mínima para alquilar (docs/05).
+
+    Category:
+      type: object
+      required: [id, slug, name, risk_level]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+        description: { type: string }
+        icon: { type: string, description: Nombre de un ícono de lucide-react. }
+        risk_level: { $ref: "#/components/schemas/RiskLevel" }
+        attributes_schema: { type: object, description: JSON Schema de los atributos propios. }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+
+    AdminCategory:
+      type: object
+      required: [id, vertical, slug, name, sort_order, attributes_schema, risk_level, prohibited, enabled]
+      properties:
+        id: { type: string, format: uuid }
+        vertical: { type: string, enum: [rental, service, product, space] }
+        parent_id: { type: string, format: uuid }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+        description: { type: string }
+        icon: { type: string }
+        sort_order: { type: integer }
+        attributes_schema: { type: object }
+        risk_level: { $ref: "#/components/schemas/RiskLevel" }
+        prohibited: { type: boolean }
+        enabled: { type: boolean }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/AdminCategory" }
+
+    CategoryInput:
+      type: object
+      required: [vertical, slug, name, risk_level]
+      properties:
+        vertical: { type: string, enum: [rental, service] }
+        parent_id: { type: string, format: uuid, description: Vacío = raíz. El árbol tiene 2 niveles. }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string, maxLength: 80 }
+        description: { type: string, maxLength: 280 }
+        icon: { type: string }
+        sort_order: { type: integer, minimum: 0, maximum: 32767 }
+        attributes_schema: { type: object }
+        risk_level: { $ref: "#/components/schemas/RiskLevel" }
+        prohibited: { type: boolean }
+        enabled: { type: boolean, default: true }
+
+    CategoryPatch:
+      type: object
+      properties:
+        parent_id: { type: string }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string, maxLength: 80 }
+        description: { type: string, maxLength: 280 }
+        icon: { type: string }
+        sort_order: { type: integer, minimum: 0, maximum: 32767 }
+        attributes_schema: { type: object }
+        risk_level: { $ref: "#/components/schemas/RiskLevel" }
+        prohibited: { type: boolean }
+        enabled: { type: boolean }
+
+    CategoryCity:
+      type: object
+      required: [city, name, city_enabled, override, active]
+      properties:
+        city: { type: string, description: Slug de la ciudad. }
+        name: { type: string }
+        city_enabled: { type: boolean }
+        override:
+          type: [boolean, "null"]
+          description: null = sigue el valor general de la categoría.
+        active: { type: boolean, description: Si se ofrece en la ciudad (una prohibida nunca). }
+
+    AdminCity:
+      type: object
+      required: [id, slug, name, region, center, enabled]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+        region: { type: string }
+        ubigeo: { type: string }
+        center: { $ref: "#/components/schemas/GeoPoint" }
+        enabled: { type: boolean }
+
+    AdminZone:
+      type: object
+      required: [id, slug, name, sort_order, enabled, has_boundary]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string }
+        ubigeo: { type: string }
+        sort_order: { type: integer }
+        enabled: { type: boolean }
+        has_boundary: { type: boolean }
+        boundary:
+          $ref: "#/components/schemas/MultiPolygon"
+          description: Simplificado (~10 m), solo en la lista.
+
+    MultiPolygon:
+      type: object
+      required: [type, coordinates]
+      properties:
+        type: { const: MultiPolygon }
+        coordinates:
+          type: array
+          description: Polígonos → anillos → posiciones [longitud, latitud].
+          items: { type: array, items: { type: array, items: { type: array, items: { type: number } } } }
+
+    BoundaryInput:
+      type: object
+      description: |
+        GeoJSON: una geometría Polygon o MultiPolygon, un Feature con ella o un FeatureCollection
+        de un solo Feature (lo que exportan overpass-turbo, geojson.io o el INEI). Hasta 20 000
+        vértices; la altura se descarta y la base corrige autointersecciones.
+      required: [type]
+      properties:
+        type: { type: string, enum: [Polygon, MultiPolygon, Feature, FeatureCollection] }
+
+    SettingKey:
+      type: string
+      enum:
+        - rental.owner_commission_bps
+        - rental.client_service_fee_bps
+        - service.provider_commission_bps
+        - service.client_service_fee_bps
+        - listings.deposit_low_bps
+        - listings.deposit_medium_bps
+        - listings.deposit_high_bps
+        - listings.deposit_min_factor_bps
+        - listings.deposit_max_factor_bps
+        - listings.public_radius_m
+
+    Setting:
+      type: object
+      required: [id, key, value, updated_at, version]
+      properties:
+        id: { type: string, format: uuid }
+        key: { $ref: "#/components/schemas/SettingKey" }
+        city_id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        value: { type: integer, description: "Puntos básicos, factor en puntos básicos o metros, según la clave." }
+        description: { type: string }
+        updated_by: { type: string, format: uuid }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer }
+
+    SettingChange:
+      type: object
+      required: [at, before, after]
+      properties:
+        at: { type: string, format: date-time }
+        actor_id: { type: string, format: uuid }
+        ip: { type: string }
+        before: { type: [object, "null"], description: null al crearse el alcance. }
+        after: { type: object }
