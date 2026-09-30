@@ -26,6 +26,8 @@ type Handlers struct {
 	Location  *handler.LocationHandler
 	// AdminCatalog: categorías, ciudades y ajustes de la plataforma.
 	AdminCatalog *handler.AdminCatalogHandler
+	// Listing: perfil de arrendador y sus publicaciones (feature 003).
+	Listing *handler.ListingHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -87,6 +89,24 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Delete("/sessions/:id", h.Me.RevokeSession)
 	me.Get("/location", h.Location.Get)
 	me.Put("/location", h.Location.Set)
+
+	// Arrendador (feature 003): el perfil en la base decide, no el rol en la sesión (así activarlo
+	// no obliga a volver a iniciar sesión).
+	me.Get("/lender", h.Listing.GetLender)
+	me.Put("/lender", h.Listing.SaveLender)
+	me.Get("/lender/deposit-suggestion", h.Listing.DepositSuggestion)
+	me.Get("/listings", h.Listing.List)
+	me.Post("/listings", h.Listing.Create)
+	me.Get("/listings/:id", h.Listing.Get)
+	me.Put("/listings/:id", h.Listing.Update)
+	me.Post("/listings/:id/submit", h.Listing.Submit)
+	me.Post("/listings/:id/pause", h.Listing.Pause)
+	me.Post("/listings/:id/resume", h.Listing.Resume)
+	me.Post("/listings/:id/archive", h.Listing.Archive)
+	me.Post("/listings/:id/duplicate", h.Listing.Duplicate)
+	me.Get("/listings/:id/availability", h.Listing.Calendar)
+	me.Post("/listings/:id/availability", h.Listing.BlockDates)
+	me.Delete("/listings/:id/availability/:block", h.Listing.UnblockDates)
 
 	admin := v1.Group("/admin", staff(m, domain.RoleAdmin)...)
 	admin.Get("/users", h.Admin.Find)
