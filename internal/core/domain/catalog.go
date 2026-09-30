@@ -87,6 +87,7 @@ type City struct {
 	Slug     string
 	Name     string
 	Region   string
+	Ubigeo   string // INEI de la provincia (Huamanga: 0501); opcional
 	Timezone string
 	Center   GeoPoint
 	Enabled  bool
@@ -101,7 +102,28 @@ type Zone struct {
 	Name        string
 	Ubigeo      string
 	SortOrder   int
+	Enabled     bool
 	HasBoundary bool
+	// Boundary es el límite en GeoJSON (MultiPolygon). Solo lo leen y escriben el admin y la base;
+	// al leer una lista llega simplificado, para dibujarlo.
+	Boundary json.RawMessage
+}
+
+// CategoryCityScope es cómo está una categoría en una ciudad: Override nil = sigue su valor global.
+type CategoryCityScope struct {
+	City     City
+	Override *bool
+}
+
+// ActiveFor dice si la categoría se ofrece en la ciudad: una prohibida nunca.
+func (s CategoryCityScope) ActiveFor(c Category) bool {
+	if c.Prohibited {
+		return false
+	}
+	if s.Override != nil {
+		return *s.Override
+	}
+	return c.Enabled
 }
 
 // Location es la ciudad y la zona de un punto (detección por ubicación).
