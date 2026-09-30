@@ -114,6 +114,11 @@ var domainErrors = []struct {
 	{domain.ErrAvailabilityOverlap, fiber.StatusConflict, "fechas_ocupadas"},
 	{domain.ErrAvailabilityPeriod, fiber.StatusUnprocessableEntity, "periodo_invalido"},
 	{domain.ErrSettingMissing, fiber.StatusInternalServerError, "ajuste_faltante"},
+	{domain.ErrPhotoType, fiber.StatusUnprocessableEntity, "foto_invalida"},
+	{domain.ErrPhotoLimit, fiber.StatusConflict, "limite_fotos"},
+	{domain.ErrPhotoNotUploaded, fiber.StatusConflict, "foto_no_subida"},
+	{domain.ErrPhotoInvalid, fiber.StatusUnprocessableEntity, "imagen_ilegible"},
+	{domain.ErrPhotoOrder, fiber.StatusUnprocessableEntity, "orden_invalido_fotos"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
