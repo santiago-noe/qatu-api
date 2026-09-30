@@ -37,10 +37,11 @@ services:
     networks: [svc]
   # Almacenamiento S3 de desarrollo (fotos de publicaciones, feature 003). En producción es
   # Cloudflare R2. MinIO ya no publica imágenes: SeaweedFS da la misma API S3.
-  # Solo el bucket qatu-public se lee sin credenciales (dev/seaweedfs-s3.json).
+  # Solo el bucket qatu-public se lee sin credenciales (dev/seaweedfs-s3.json). CORS: la app en
+  # desarrollo (3000) y la de las pruebas e2e (3200) suben fotos directo desde el navegador.
   storage:
     image: chrislusf/seaweedfs:4.48
-    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -s3.allowedOrigins=http://localhost:3000
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -s3.allowedOrigins=http://localhost:3000,http://localhost:3200
     ports: ["8333:8333"]
     volumes:
       - qatu_storage:/data
