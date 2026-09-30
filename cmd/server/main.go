@@ -14,13 +14,17 @@ import (
 	apihttp "github.com/santiago-noe/qatu-api/internal/adapter/inbound/http"
 	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/handler"
 	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/http/middleware"
+	"github.com/santiago-noe/qatu-api/internal/adapter/inbound/worker"
 	"github.com/santiago-noe/qatu-api/internal/adapter/logging"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/argon2"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/breachedlist"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/googleoauth"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/imaging"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/jsonschema"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/postgres"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/queue"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/redisclient"
+	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/s3storage"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/smtp"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/system"
 	"github.com/santiago-noe/qatu-api/internal/adapter/outbound/turnstile"
@@ -69,6 +73,19 @@ func run() error {
 	accounts := postgres.NewAccountRepository(db)
 	clock := system.Clock{}
 
+	storage, err := s3storage.New(s3storage.Config{Endpoint: cfg.Storage.Endpoint, AccessKey: cfg.Storage.AccessKey,
+		SecretKey: cfg.Storage.SecretKey, UseSSL: cfg.Storage.UseSSL, Region: cfg.Storage.Region,
+		PublicBucket: cfg.Storage.PublicBucket, PrivateBucket: cfg.Storage.PrivateBucket, PublicBaseURL: cfg.Storage.PublicBaseURL})
+	if err != nil {
+		return err
+	}
+	if cfg.Storage.CreateBuckets {
+		if err := storage.EnsureBuckets(ctx); err != nil {
+			// Sin almacenamiento la API sigue: solo fallan las fotos (y /health lo muestra).
+			log.Warn().Err(err).Msg("no se pudieron crear los buckets de fotos")
+		}
+	}
+
 	var human port.HumanVerifier = turnstile.New(cfg.Turnstile.Secret)
 	if cfg.Turnstile.Secret == "" { // solo en desarrollo: config.Load lo exige en producción
 		log.Warn().Msg("APP__TURNSTILE__SECRET vacío: captcha desactivado")
@@ -76,7 +93,7 @@ func run() error {
 	}
 
 	// Casos de uso.
-	health := service.NewHealthService(healthTimeout, db, cache)
+	health := service.NewHealthService(healthTimeout, db, cache, storage)
 	sessions := service.NewSessionService(redisclient.NewSessionStore(cache.RDB, redisPrefix), clock,
 		service.SessionConfig{TTL: cfg.Session.TTL, RenewAfter: cfg.Session.RenewAfter})
 	mailer, err := smtp.New(smtp.Config{Host: cfg.SMTP.Host, Port: cfg.SMTP.Port, Username: cfg.SMTP.Username,
@@ -129,12 +146,17 @@ func run() error {
 	catalogAdmin := service.NewCatalogAdminService(catalogRepo, schemas, catalogCache)
 	userLocation := service.NewUserLocationService(accounts, catalog)
 
+	listingRepo := postgres.NewListingRepository(db)
 	lenderRepo := postgres.NewLenderRepository(db)
 	lenders := service.NewLenderService(accounts, lenderRepo, catalog, clock, cfg.Legal.LenderTermsVersion)
 	listings := service.NewListingService(service.ListingDeps{
-		Lenders: lenderRepo, Listings: postgres.NewListingRepository(db), Categories: catalogRepo, Catalog: catalog,
+		Lenders: lenderRepo, Listings: listingRepo, Categories: catalogRepo, Catalog: catalog,
 		Attributes: schemas, Settings: service.NewSettingsResolver(catalogRepo, clock), Clock: clock, IDs: ids,
 		LocationSecret: []byte(cfg.Security.LocationSecret),
+	})
+	photos := service.NewPhotoService(service.PhotoDeps{
+		Listings: listingRepo, Photos: postgres.NewPhotoRepository(db), Storage: storage,
+		Jobs: queue.NewPhotoJobs(cache.RDB), Images: imaging.New(), IDs: ids,
 	})
 
 	// Adaptadores de entrada.
@@ -152,6 +174,7 @@ func run() error {
 			Location:     handler.NewLocationHandler(userLocation),
 			AdminCatalog: handler.NewAdminCatalogHandler(catalogAdmin),
 			Listing:      handler.NewListingHandler(lenders, listings),
+			Photo:        handler.NewPhotoHandler(photos),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
@@ -162,6 +185,16 @@ func run() error {
 		},
 		apihttp.Options{TrustPrivateProxies: cfg.HTTP.TrustPrivateProxies},
 	)
+
+	// Trabajos en segundo plano (procesar fotos) en el mismo proceso. Para escalar, se apaga aquí
+	// (APP__WORKER__ENABLED=false) y se corre el mismo binario solo como worker.
+	if cfg.Worker.Enabled {
+		jobs := worker.New(cache.RDB, log, cfg.Worker.Concurrency, photos)
+		if err := jobs.Start(); err != nil {
+			return err
+		}
+		defer jobs.Shutdown()
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
