@@ -119,6 +119,8 @@ var domainErrors = []struct {
 	{domain.ErrPhotoNotUploaded, fiber.StatusConflict, "foto_no_subida"},
 	{domain.ErrPhotoInvalid, fiber.StatusUnprocessableEntity, "imagen_ilegible"},
 	{domain.ErrPhotoOrder, fiber.StatusUnprocessableEntity, "orden_invalido_fotos"},
+	{domain.ErrRejectionReason, fiber.StatusUnprocessableEntity, "motivo_rechazo_requerido"},
+	{domain.ErrSelfModeration, fiber.StatusForbidden, "moderacion_propia"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
