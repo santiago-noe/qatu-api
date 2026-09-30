@@ -86,6 +86,32 @@ func NextListingStatus(current ListingStatus, action ListingAction, needsReview 
 	return "", ErrListingTransition
 }
 
+// ApplyListingAction cambia el estado y lo que depende de él: al volver a revisión o publicarse se
+// borra el motivo del rechazo anterior, y la primera publicación queda fechada. El motivo de un
+// rechazo nuevo lo pone quien rechaza (moderación).
+func ApplyListingAction(l ToolListing, action ListingAction, needsReview bool, now time.Time) (ToolListing, error) {
+	status, err := NextListingStatus(l.Status, action, needsReview)
+	if err != nil {
+		return ToolListing{}, err
+	}
+	l.Status = status
+	if status == ListingInReview || status == ListingPublished {
+		l.RejectionReason = ""
+	}
+	if status == ListingPublished && l.FirstPublishedAt == nil {
+		l.FirstPublishedAt = &now
+	}
+	return l, nil
+}
+
+// ReviewItem es una publicación en la cola de moderación, con lo que el moderador necesita saber
+// del arrendador (sin datos de contacto).
+type ReviewItem struct {
+	Listing      ToolListing
+	OwnerName    string
+	FirstListing bool // el arrendador aún no tiene ninguna aprobada
+}
+
 // Editable indica si el dueño puede cambiar los datos. En revisión se congela (lo que aprueba
 // moderación es lo que se publica) y archivada ya no vuelve.
 func (s ListingStatus) Editable() bool {
