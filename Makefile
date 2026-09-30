@@ -23,6 +23,7 @@ test-integration:
 	QATU_TEST_REDIS_ADDR=localhost:6379 \
 	QATU_TEST_DATABASE_URL=postgres://qatu:qatu@localhost:5433/qatu?sslmode=disable \
 	QATU_TEST_MAILPIT=localhost \
+	QATU_TEST_S3=localhost:8333 \
 	go test -count=1 ./...
 lint:
 	go vet ./...
