@@ -1,4 +1,5 @@
-// Package jsonschema implementa port.SchemaValidator con santhosh-tekuri/jsonschema (2020-12).
+// Package jsonschema implementa port.SchemaValidator y port.AttributesValidator con
+// santhosh-tekuri/jsonschema (2020-12).
 package jsonschema
 
 import (
@@ -41,18 +42,46 @@ func (Validator) CheckSchema(schema json.RawMessage) error {
 	if err := json.Unmarshal(schema, &root); err != nil || root.Type != "object" {
 		return domain.ErrInvalidSchema
 	}
+	if _, err := compile(schema); err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrInvalidSchema, err)
+	}
+	return nil
+}
+
+// maxAttributesBytes: los atributos de una herramienta (marca, potencia…) son pocos campos.
+const maxAttributesBytes = 8 << 10
+
+// Validate revisa los atributos de una publicación contra el esquema de su categoría. Un esquema
+// guardado que ya no compila también rechaza (el admin debe corregirlo).
+func (Validator) Validate(schema, doc []byte) error {
+	if len(doc) > maxAttributesBytes {
+		return domain.ErrListingAttributes
+	}
+	compiled, err := compile(schema)
+	if err != nil {
+		return fmt.Errorf("%w: esquema de la categoría: %v", domain.ErrListingAttributes, err)
+	}
+	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(doc))
+	if err != nil {
+		return domain.ErrListingAttributes
+	}
+	if err := compiled.Validate(value); err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrListingAttributes, err)
+	}
+	return nil
+}
+
+// compile arma el esquema en memoria, sin cargar referencias externas.
+func compile(schema []byte) (*jsonschema.Schema, error) {
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
 	if err != nil {
-		return domain.ErrInvalidSchema
+		return nil, err
 	}
 	c := jsonschema.NewCompiler()
 	c.DefaultDraft(jsonschema.Draft2020)
 	c.UseLoader(noLoader{})
 	if err := c.AddResource(resourceURL, doc); err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidSchema, err)
+		return nil, err
 	}
-	if _, err := c.Compile(resourceURL); err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidSchema, err)
-	}
-	return nil
+	return c.Compile(resourceURL)
 }
