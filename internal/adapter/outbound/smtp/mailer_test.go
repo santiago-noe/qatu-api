@@ -103,3 +103,35 @@ func TestSendThroughMailpit(t *testing.T) {
 		t.Fatalf("Mailpit no recibió el correo: %+v", found)
 	}
 }
+
+func TestBuildListingReview(t *testing.T) {
+	m, err := New(Config{Host: "localhost", Port: 1025, From: "Qatu <no-responder@qatu.local>"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, _ := mail.ParseAddress("ana@correo.pe")
+	for _, tt := range []struct {
+		data     map[string]any
+		want     []string
+		dontWant string
+	}{
+		{map[string]any{"Name": "Ana", "Title": "Rotomartillo Bosch", "Approved": true},
+			[]string{"ya aparece en Qatu", "Rotomartillo Bosch"}, "necesita un cambio"},
+		{map[string]any{"Name": "Ana", "Title": "Rotomartillo Bosch", "Approved": false, "Reason": "Fotos <b>borrosas</b>"},
+			[]string{"necesita un cambio", "Fotos &lt;b&gt;borrosas&lt;/b&gt;", "Mis publicaciones"}, "ya aparece en Qatu"},
+	} {
+		raw, err := m.build(to, "Asunto", "listing_review", tt.data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(raw)
+		for _, want := range tt.want {
+			if !strings.Contains(body, want) {
+				t.Errorf("falta %q", want)
+			}
+		}
+		if strings.Contains(body, tt.dontWant) {
+			t.Errorf("sobra %q", tt.dontWant)
+		}
+	}
+}
