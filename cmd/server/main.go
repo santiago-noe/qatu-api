@@ -156,7 +156,11 @@ func run() error {
 	})
 	photos := service.NewPhotoService(service.PhotoDeps{
 		Listings: listingRepo, Photos: postgres.NewPhotoRepository(db), Storage: storage,
-		Jobs: queue.NewPhotoJobs(cache.RDB), Images: imaging.New(), IDs: ids,
+		Jobs: queue.NewPhotoJobs(cache.RDB), Images: imaging.New(), IDs: ids, Clock: clock,
+	})
+
+	moderation := service.NewModerationService(service.ModerationDeps{
+		Listings: listingRepo, Categories: catalogRepo, Accounts: accounts, Photos: photos, Mailer: mailer, Clock: clock,
 	})
 
 	// Adaptadores de entrada.
@@ -175,6 +179,7 @@ func run() error {
 			AdminCatalog: handler.NewAdminCatalogHandler(catalogAdmin),
 			Listing:      handler.NewListingHandler(lenders, listings),
 			Photo:        handler.NewPhotoHandler(photos),
+			Moderation:   handler.NewModerationHandler(moderation),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
