@@ -24,7 +24,7 @@ const (
 	ListingMaxMinDuration       = 720  // 30 días
 	ListingMaxMaxDuration       = 2160 // 90 días
 	RejectionReasonMax          = 500
-	listingMaxAmount      Cents = 100_000_00 // S/ 100 000: tope de cordura para precios y valores
+	ListingMaxAmount      Cents = 100_000_00 // S/ 100 000: tope de cordura para precios y valores
 )
 
 // ListingStatus sigue la máquina de estados de la spec 003.
@@ -203,7 +203,7 @@ func NormalizeListing(l ToolListing) (ToolListing, error) {
 	}
 	l.Accessories = accessories
 	for _, amount := range append(l.Prices.all(), l.ReplacementValue, l.Deposit, l.DeliveryFee) {
-		if amount < 0 || amount > listingMaxAmount {
+		if amount < 0 || amount > ListingMaxAmount {
 			return ToolListing{}, ErrListingAmount
 		}
 	}
