@@ -397,22 +397,13 @@ func (s *ListingService) simpleTransition(ctx context.Context, ownerID, id strin
 
 func (s *ListingService) transition(ctx context.Context, actorID string, current domain.ToolListing, version int,
 	action domain.ListingAction, review bool, ip string) (domain.ToolListing, error) {
-	status, err := domain.NextListingStatus(current.Status, action, review)
+	next, err := domain.ApplyListingAction(current, action, review, s.d.Clock.Now())
 	if err != nil {
 		return domain.ToolListing{}, err
 	}
-	next := current
-	next.Status = status
-	if status == domain.ListingInReview || status == domain.ListingPublished {
-		next.RejectionReason = ""
-	}
-	if status == domain.ListingPublished && next.FirstPublishedAt == nil {
-		now := s.d.Clock.Now()
-		next.FirstPublishedAt = &now
-	}
 	audit := domain.AuditEntry{
 		ActorID: actorID, Action: domain.AuditListingStatus, Entity: "listing", EntityID: current.ID,
-		Before: map[string]any{"status": current.Status}, After: map[string]any{"status": status, "action": action}, IP: ip,
+		Before: map[string]any{"status": current.Status}, After: map[string]any{"status": next.Status, "action": action}, IP: ip,
 	}
 	return s.d.Listings.UpdateListing(ctx, next, version, audit)
 }
