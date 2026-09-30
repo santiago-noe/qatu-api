@@ -208,7 +208,7 @@ func (s *ListingService) cityZoneIDs(ctx context.Context, citySlug string, ids [
 // checkPublishable son las reglas que debe cumplir una publicación fuera de borrador (al enviarla
 // y al editarla ya publicada): atributos según el esquema, garantía en rango y datos completos.
 func (s *ListingService) checkPublishable(ctx context.Context, lc listingContext, l domain.ToolListing) error {
-	if err := s.d.Attributes.Validate(lc.category.AttributesSchema, l.Attributes); err != nil {
+	if err := s.d.Attributes.Validate(lc.category.EffectiveSchema(lc.parent), l.Attributes); err != nil {
 		return err
 	}
 	rule, err := domain.DepositRuleFrom(lc.settings, lc.category.RiskLevel)
