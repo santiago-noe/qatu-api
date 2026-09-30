@@ -20,7 +20,8 @@ func TestLoadDefaults(t *testing.T) {
 
 // productionSecrets son las variables sin valor por defecto que exige producción, en orden.
 var productionSecrets = []string{
-	"APP__SECURITY__CODE_SECRET", "APP__TURNSTILE__SECRET", "APP__GOOGLE__CLIENT_ID", "APP__GOOGLE__CLIENT_SECRET",
+	"APP__SECURITY__CODE_SECRET", "APP__SECURITY__LOCATION_SECRET", "APP__TURNSTILE__SECRET", "APP__GOOGLE__CLIENT_ID",
+	"APP__GOOGLE__CLIENT_SECRET",
 }
 
 // clearSecrets aísla la prueba del .env que exporta el Makefile (una variable vacía cuenta como no definida).

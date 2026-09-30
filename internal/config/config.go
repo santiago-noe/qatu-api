@@ -62,6 +62,8 @@ type SessionConfig struct {
 type LegalConfig struct {
 	TermsVersion   string `mapstructure:"terms_version"`
 	PrivacyVersion string `mapstructure:"privacy_version"`
+	// LenderTermsVersion: condiciones que se aceptan al activar el perfil de arrendador (003).
+	LenderTermsVersion string `mapstructure:"lender_terms_version"`
 }
 
 type SMTPConfig struct {
@@ -75,6 +77,9 @@ type SMTPConfig struct {
 type SecurityConfig struct {
 	// CodeSecret firma los códigos de un solo uso guardados en Redis.
 	CodeSecret string `mapstructure:"code_secret"`
+	// LocationSecret desplaza el punto público de cada publicación (HMAC): sin él no se puede
+	// reconstruir el punto exacto. Cambiarlo mueve todos los puntos públicos.
+	LocationSecret string `mapstructure:"location_secret"`
 }
 
 // CodesConfig: códigos de 6 dígitos (verificación de correo, recuperación, dos pasos).
@@ -85,7 +90,10 @@ type CodesConfig struct {
 }
 
 // Solo para desarrollo: en producción Load exige APP__SECURITY__CODE_SECRET.
-const devCodeSecret = "dev-only-code-secret-change-me"
+const (
+	devCodeSecret     = "dev-only-code-secret-change-me"
+	devLocationSecret = "dev-only-location-secret-change-me"
+)
 
 // LimitConfig es un máximo de acciones por ventana de tiempo.
 type LimitConfig struct {
@@ -130,12 +138,14 @@ var defaults = map[string]any{
 	"session.renew_after":                "24h",
 	"legal.terms_version":                "borrador-2026-09",
 	"legal.privacy_version":              "borrador-2026-09",
+	"legal.lender_terms_version":         "borrador-2026-09",
 	"smtp.host":                          "localhost",
 	"smtp.port":                          1025,
 	"smtp.username":                      "",
 	"smtp.password":                      "",
 	"smtp.from":                          "Qatu <no-responder@qatu.local>",
 	"security.code_secret":               "",
+	"security.location_secret":           "",
 	"codes.ttl":                          "15m",
 	"codes.max_attempts":                 5,
 	"codes.resend_cooldown":              "1m",
@@ -164,6 +174,7 @@ func Load() (Config, error) {
 		// Secretos sin valor por defecto: en producción su ausencia es un error de despliegue.
 		for _, s := range []struct{ env, value string }{
 			{"APP__SECURITY__CODE_SECRET", cfg.Security.CodeSecret},
+			{"APP__SECURITY__LOCATION_SECRET", cfg.Security.LocationSecret},
 			{"APP__TURNSTILE__SECRET", cfg.Turnstile.Secret},
 			{"APP__GOOGLE__CLIENT_ID", cfg.Google.ClientID},
 			{"APP__GOOGLE__CLIENT_SECRET", cfg.Google.ClientSecret},
@@ -175,6 +186,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Security.CodeSecret == "" {
 		cfg.Security.CodeSecret = devCodeSecret
+	}
+	if cfg.Security.LocationSecret == "" {
+		cfg.Security.LocationSecret = devLocationSecret
 	}
 	if cfg.Google.Enabled() && cfg.Google.ClientSecret == "" {
 		return Config{}, fmt.Errorf("config: APP__GOOGLE__CLIENT_SECRET es obligatorio si hay APP__GOOGLE__CLIENT_ID")
