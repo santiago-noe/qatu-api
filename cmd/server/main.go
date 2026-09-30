@@ -125,8 +125,17 @@ func run() error {
 	catalogRepo := postgres.NewCatalogRepository(db)
 	catalogCache := redisclient.NewCache(cache.RDB, redisPrefix)
 	catalog := service.NewCatalogService(catalogRepo, catalogCache)
-	catalogAdmin := service.NewCatalogAdminService(catalogRepo, jsonschema.New(), catalogCache)
+	schemas := jsonschema.New()
+	catalogAdmin := service.NewCatalogAdminService(catalogRepo, schemas, catalogCache)
 	userLocation := service.NewUserLocationService(accounts, catalog)
+
+	lenderRepo := postgres.NewLenderRepository(db)
+	lenders := service.NewLenderService(accounts, lenderRepo, catalog, clock, cfg.Legal.LenderTermsVersion)
+	listings := service.NewListingService(service.ListingDeps{
+		Lenders: lenderRepo, Listings: postgres.NewListingRepository(db), Categories: catalogRepo, Catalog: catalog,
+		Attributes: schemas, Settings: service.NewSettingsResolver(catalogRepo, clock), Clock: clock, IDs: ids,
+		LocationSecret: []byte(cfg.Security.LocationSecret),
+	})
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
@@ -142,6 +151,7 @@ func run() error {
 			Catalog:      handler.NewCatalogHandler(catalog),
 			Location:     handler.NewLocationHandler(userLocation),
 			AdminCatalog: handler.NewAdminCatalogHandler(catalogAdmin),
+			Listing:      handler.NewListingHandler(lenders, listings),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
