@@ -37,8 +37,19 @@ func (s *CatalogService) Categories(ctx context.Context, vertical domain.Vertica
 	key := CatalogCachePrefix + "categories:" + string(vertical) + ":" + citySlug
 	return cached(ctx, s.cache, key, catalogTTL, func() ([]domain.Category, error) {
 		flat, err := s.reader.ListCategories(ctx, vertical, cityID)
-		return domain.BuildCategoryTree(flat), err
+		return withEffectiveSchemas(domain.BuildCategoryTree(flat)), err
 	})
+}
+
+// withEffectiveSchemas: en el catálogo público cada tipo trae el esquema con el que se publica
+// (el de su raíz más el propio), que es el que arma el formulario de la app.
+func withEffectiveSchemas(tree []domain.Category) []domain.Category {
+	for i, root := range tree {
+		for j, child := range root.Children {
+			tree[i].Children[j].AttributesSchema = child.EffectiveSchema(root)
+		}
+	}
+	return tree
 }
 
 // Cities devuelve las ciudades habilitadas.
