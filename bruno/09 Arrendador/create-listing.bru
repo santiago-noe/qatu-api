@@ -1,0 +1,55 @@
+meta {
+  name: Crear borrador
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/me/listings
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "category_id": "{{categoryId}}",
+    "title": "Rotomartillo Bosch 800 W",
+    "attributes": {
+      "marca": "Bosch"
+    },
+    "replacement_value": 45000,
+    "deposit": 14000,
+    "prices": {
+      "day": 3500,
+      "week": 18000
+    },
+    "accessories": [
+      "Maletín",
+      "Broca de 10 mm"
+    ],
+    "pickup_enabled": true,
+    "pickup_location": {
+      "lat": -13.1631,
+      "lng": -74.2237
+    },
+    "delivery_enabled": true,
+    "delivery_fee": 1000,
+    "delivery_zone_ids": [
+      "{{zoneId}}"
+    ],
+    "booking_mode": "request",
+    "cancel_policy": "moderate",
+    "min_verification": 1,
+    "min_notice_hours": 12,
+    "min_duration_hours": 24,
+    "max_duration_hours": 720
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.id) { bru.setEnvVar("listingId", res.body.id); bru.setEnvVar("listingVersion", res.body.version); }
+}
+
+docs {
+  zoneId sale de 04 Catálogo público / Distritos. Guarda listingId y listingVersion.
+}

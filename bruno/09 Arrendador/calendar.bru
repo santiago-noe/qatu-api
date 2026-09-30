@@ -1,0 +1,16 @@
+meta {
+  name: Calendario
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/me/listings/{{listingId}}/availability?from=2026-10-01T00:00:00-05:00&to=2026-12-31T00:00:00-05:00
+  body: none
+  auth: inherit
+}
+
+params:query {
+  from: 2026-10-01T00:00:00-05:00
+  to: 2026-12-31T00:00:00-05:00
+}

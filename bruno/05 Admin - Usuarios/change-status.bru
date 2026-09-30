@@ -1,0 +1,18 @@
+meta {
+  name: Suspender o reactivar
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/admin/users/{{userId}}/status
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "status": "suspended",
+    "reason": "Prueba desde Bruno"
+  }
+}

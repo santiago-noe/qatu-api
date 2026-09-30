@@ -1,0 +1,25 @@
+meta {
+  name: Enviar a publicar
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/me/listings/{{listingId}}/submit
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": {{listingVersion}}
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.id) { bru.setEnvVar("listingId", res.body.id); bru.setEnvVar("listingVersion", res.body.version); }
+}
+
+docs {
+  Pide 3 fotos listas (parte 3). La primera del arrendador va a revisión.
+}

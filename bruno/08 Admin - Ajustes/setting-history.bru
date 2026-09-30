@@ -1,0 +1,15 @@
+meta {
+  name: Historial de una comisión
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/admin/settings/rental.owner_commission_bps/history?limit=20
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 20
+}

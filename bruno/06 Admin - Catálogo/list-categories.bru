@@ -1,0 +1,15 @@
+meta {
+  name: Árbol completo
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/catalog/categories?vertical=rental
+  body: none
+  auth: inherit
+}
+
+params:query {
+  vertical: rental
+}

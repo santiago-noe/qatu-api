@@ -1,0 +1,15 @@
+meta {
+  name: Enviar código de dos pasos
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/auth/two-factor/send
+  body: none
+  auth: inherit
+}
+
+docs {
+  Solo roles internos. Después, Confirmar dos pasos con el código de Mailpit para entrar a /admin.
+}

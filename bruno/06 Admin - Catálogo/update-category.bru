@@ -1,0 +1,21 @@
+meta {
+  name: Editar categoría
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/admin/catalog/categories/{{categoryId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "risk_level": "medium"
+  }
+}
+
+docs {
+  Con prohibited: true sus publicaciones activas salen del catálogo.
+}

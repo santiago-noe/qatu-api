@@ -1,0 +1,21 @@
+meta {
+  name: Encender ciudad
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/admin/cities/cusco
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": true
+  }
+}
+
+docs {
+  Sin distritos activos responde 409 ciudad_sin_distritos.
+}

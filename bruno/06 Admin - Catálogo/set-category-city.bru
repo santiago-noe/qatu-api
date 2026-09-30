@@ -1,0 +1,21 @@
+meta {
+  name: Apagar solo en una ciudad
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/admin/catalog/categories/{{categoryId}}/cities/ayacucho
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": false
+  }
+}
+
+docs {
+  enabled: null vuelve al valor general.
+}

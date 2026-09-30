@@ -1,0 +1,26 @@
+meta {
+  name: Iniciar sesión
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{email}}",
+    "password": "{{password}}"
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.session?.token) bru.setEnvVar("token", res.body.session.token);
+}
+
+docs {
+  Guarda el token en la variable token del entorno: las demás peticiones lo usan.
+}

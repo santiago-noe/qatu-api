@@ -1,0 +1,34 @@
+meta {
+  name: Crear tipo
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/catalog/categories
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "vertical": "rental",
+    "parent_id": "{{categoryId}}",
+    "slug": "cortadora-de-cemento",
+    "name": "Cortadora de cemento",
+    "risk_level": "high",
+    "enabled": false,
+    "attributes_schema": {
+      "type": "object",
+      "properties": {
+        "potencia_w": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}
+
+docs {
+  parent_id es una categoría raíz (Construcción). Se crea apagada para no mostrarla aún.
+}

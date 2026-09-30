@@ -1,0 +1,25 @@
+meta {
+  name: Activar perfil de arrendador
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/me/lender
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "kind": "person",
+    "phone": "987 654 321",
+    "city": "ayacucho",
+    "zone": "carmen-alto",
+    "accept_terms": true
+  }
+}
+
+docs {
+  Pide el correo verificado. accept_terms solo la primera vez.
+}

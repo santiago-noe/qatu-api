@@ -1,0 +1,18 @@
+meta {
+  name: Editar distrito
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/admin/cities/cusco/zones/wanchaq
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Wánchaq",
+    "sort_order": 2
+  }
+}

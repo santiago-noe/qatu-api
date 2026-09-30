@@ -1,0 +1,17 @@
+meta {
+  name: Confirmar dos pasos
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/auth/two-factor/verify
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "code": "123456"
+  }
+}

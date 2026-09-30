@@ -1,0 +1,16 @@
+meta {
+  name: Oficios
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/catalog/categories?vertical=service&city=ayacucho
+  body: none
+  auth: none
+}
+
+params:query {
+  vertical: service
+  city: ayacucho
+}

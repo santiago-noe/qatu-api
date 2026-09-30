@@ -1,0 +1,21 @@
+meta {
+  name: Reanudar
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/me/listings/{{listingId}}/resume
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": {{listingVersion}}
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.id) { bru.setEnvVar("listingId", res.body.id); bru.setEnvVar("listingVersion", res.body.version); }
+}

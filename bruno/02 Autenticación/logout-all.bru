@@ -1,0 +1,11 @@
+meta {
+  name: Cerrar todas las sesiones
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/auth/logout-all
+  body: none
+  auth: inherit
+}

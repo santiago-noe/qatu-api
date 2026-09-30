@@ -1,0 +1,11 @@
+meta {
+  name: Cerrar una sesión
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/me/sessions/{{sessionId}}
+  body: none
+  auth: inherit
+}

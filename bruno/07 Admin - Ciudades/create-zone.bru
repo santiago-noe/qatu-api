@@ -1,0 +1,51 @@
+meta {
+  name: Nuevo distrito
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/admin/cities/cusco/zones
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "slug": "wanchaq",
+    "name": "Wanchaq",
+    "ubigeo": "080108",
+    "sort_order": 1,
+    "boundary": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -71.975,
+            -13.53
+          ],
+          [
+            -71.955,
+            -13.53
+          ],
+          [
+            -71.955,
+            -13.51
+          ],
+          [
+            -71.975,
+            -13.51
+          ],
+          [
+            -71.975,
+            -13.53
+          ]
+        ]
+      ]
+    }
+  }
+}
+
+docs {
+  boundary es GeoJSON (Polygon, MultiPolygon, Feature o FeatureCollection de uno), en longitud, latitud.
+}

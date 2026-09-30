@@ -1,0 +1,11 @@
+meta {
+  name: Ver una cuenta
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/users/{{userId}}
+  body: none
+  auth: inherit
+}

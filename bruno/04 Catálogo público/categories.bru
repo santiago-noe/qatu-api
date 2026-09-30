@@ -1,0 +1,16 @@
+meta {
+  name: Categorías de herramientas
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/catalog/categories?vertical=rental&city=ayacucho
+  body: none
+  auth: none
+}
+
+params:query {
+  vertical: rental
+  city: ayacucho
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Nueva ciudad
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/cities
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "slug": "cusco",
+    "name": "Cusco",
+    "region": "Cusco",
+    "ubigeo": "0801",
+    "center": {
+      "lat": -13.5167,
+      "lng": -71.9781
+    }
+  }
+}
+
+docs {
+  Nace apagada.
+}

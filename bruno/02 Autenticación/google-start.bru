@@ -1,0 +1,18 @@
+meta {
+  name: Google: empezar
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/auth/google/start
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "adult_declared": true,
+    "accept_legal": true
+  }
+}

@@ -1,0 +1,18 @@
+meta {
+  name: Elegir mi distrito
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/me/location
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "city": "ayacucho",
+    "zone": "carmen-alto"
+  }
+}

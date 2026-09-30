@@ -1,0 +1,27 @@
+meta {
+  name: Bloquear fechas
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/me/listings/{{listingId}}/availability
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "start": "2026-11-01T08:00:00-05:00",
+    "end": "2026-11-03T08:00:00-05:00",
+    "note": "Mantenimiento"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) bru.setEnvVar("blockId", res.body.id);
+}
+
+docs {
+  El fin no se incluye.
+}

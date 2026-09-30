@@ -1,0 +1,19 @@
+meta {
+  name: Buscar por correo
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/users?email={{email}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  email: {{email}}
+}
+
+docs {
+  Todas las rutas /admin piden rol admin y el segundo paso confirmado.
+}

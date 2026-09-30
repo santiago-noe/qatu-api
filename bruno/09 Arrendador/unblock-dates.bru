@@ -1,0 +1,11 @@
+meta {
+  name: Quitar bloqueo
+  type: http
+  seq: 15
+}
+
+delete {
+  url: {{baseUrl}}/me/listings/{{listingId}}/availability/{{blockId}}
+  body: none
+  auth: inherit
+}

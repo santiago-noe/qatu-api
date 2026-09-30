@@ -1,0 +1,20 @@
+meta {
+  name: Garantía sugerida
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/me/lender/deposit-suggestion?category={{categoryId}}&value=45000
+  body: none
+  auth: inherit
+}
+
+params:query {
+  category: {{categoryId}}
+  value: 45000
+}
+
+docs {
+  categoryId es un tipo de herramienta (segundo nivel). Montos en céntimos.
+}

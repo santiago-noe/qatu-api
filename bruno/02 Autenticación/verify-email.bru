@@ -1,0 +1,21 @@
+meta {
+  name: Confirmar correo
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/email/verify
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "code": "123456"
+  }
+}
+
+docs {
+  El código está en Mailpit.
+}

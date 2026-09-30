@@ -1,0 +1,26 @@
+meta {
+  name: Google: terminar
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/auth/google/callback
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "code": "",
+    "state": ""
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.session?.token) bru.setEnvVar("token", res.body.session.token);
+}
+
+docs {
+  code y state vienen de la redirección de Google; el BFF normalmente hace este paso.
+}

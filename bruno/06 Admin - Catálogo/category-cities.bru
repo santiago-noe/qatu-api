@@ -1,0 +1,11 @@
+meta {
+  name: Categoría por ciudad
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/admin/catalog/categories/{{categoryId}}/cities
+  body: none
+  auth: inherit
+}

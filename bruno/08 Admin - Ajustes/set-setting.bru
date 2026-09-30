@@ -1,0 +1,23 @@
+meta {
+  name: Cambiar comisión en Ayacucho
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/admin/settings
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "key": "rental.owner_commission_bps",
+    "city": "ayacucho",
+    "value": 900
+  }
+}
+
+docs {
+  Puntos básicos: 900 = 9 %. Solo afecta a las transacciones nuevas.
+}
