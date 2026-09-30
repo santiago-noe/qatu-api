@@ -40,4 +40,13 @@ const (
 
 	// Al prohibir una categoría, sus publicaciones activas salen del catálogo (spec 002).
 	AuditListingsRetired = "listing.retired_prohibited_category"
+
+	// Publicaciones de herramientas (feature 003).
+	AuditLenderActivated  = "lender.activated"
+	AuditLenderUpdated    = "lender.updated"
+	AuditListingCreated   = "listing.created"
+	AuditListingUpdated   = "listing.updated"
+	AuditListingStatus    = "listing.status_changed"
+	AuditListingBlocked   = "listing.dates_blocked"
+	AuditListingUnblocked = "listing.dates_unblocked"
 )
