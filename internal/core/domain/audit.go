@@ -49,4 +49,6 @@ const (
 	AuditListingStatus    = "listing.status_changed"
 	AuditListingBlocked   = "listing.dates_blocked"
 	AuditListingUnblocked = "listing.dates_unblocked"
+	AuditListingApproved  = "listing.approved"
+	AuditListingRejected  = "listing.rejected"
 )
