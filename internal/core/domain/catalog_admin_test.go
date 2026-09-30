@@ -59,3 +59,23 @@ func TestNormalizeSettingValue(t *testing.T) {
 		t.Fatal("IsKnownSetting")
 	}
 }
+
+func TestSettingRangesByKind(t *testing.T) {
+	tests := []struct {
+		key, raw string
+		ok       bool
+	}{
+		{"listings.deposit_max_factor_bps", "15000", true}, // un factor pasa del 100 %
+		{"listings.deposit_max_factor_bps", "50001", false},
+		{"listings.deposit_high_bps", "10001", false}, // un porcentaje no
+		{"listings.public_radius_m", "500", true},
+		{"listings.public_radius_m", "99", false},
+		{"listings.public_radius_m", "3001", false},
+	}
+	for _, tt := range tests {
+		_, err := NormalizeSettingValue(tt.key, []byte(tt.raw))
+		if (err == nil) != tt.ok {
+			t.Errorf("%s = %s: err %v, quiero ok=%v", tt.key, tt.raw, err, tt.ok)
+		}
+	}
+}
