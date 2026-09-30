@@ -1,0 +1,27 @@
+meta {
+  name: Pedir subida de foto
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/me/listings/{{listingId}}/photos
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "kind": "public",
+    "content_type": "image/jpeg",
+    "size": 2500000
+  }
+}
+
+script:post-response {
+  if (res.status === 201) { bru.setEnvVar("photoId", res.body.photo.id); bru.setEnvVar("uploadUrl", res.body.upload.url); }
+}
+
+docs {
+  Devuelve upload.url: sube el archivo con curl -X PUT -H 'Content-Type: image/jpeg' --data-binary @foto.jpg "<url>" y luego Confirmar subida. kind serial = la placa (privada).
+}

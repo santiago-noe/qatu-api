@@ -1,0 +1,23 @@
+meta {
+  name: Ordenar fotos
+  type: http
+  seq: 19
+}
+
+put {
+  url: {{baseUrl}}/me/listings/{{listingId}}/photos/order
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "ids": [
+      "{{photoId}}"
+    ]
+  }
+}
+
+docs {
+  Todas las públicas una vez; la primera es la portada.
+}

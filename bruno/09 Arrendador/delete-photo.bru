@@ -1,0 +1,11 @@
+meta {
+  name: Quitar foto
+  type: http
+  seq: 20
+}
+
+delete {
+  url: {{baseUrl}}/me/listings/{{listingId}}/photos/{{photoId}}
+  body: none
+  auth: inherit
+}

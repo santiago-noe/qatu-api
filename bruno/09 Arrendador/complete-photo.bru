@@ -1,0 +1,15 @@
+meta {
+  name: Confirmar subida
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/me/listings/{{listingId}}/photos/{{photoId}}/complete
+  body: none
+  auth: inherit
+}
+
+docs {
+  Se procesa en segundo plano: 320, 800 y 1600 px sin EXIF.
+}
