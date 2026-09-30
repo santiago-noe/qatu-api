@@ -131,3 +131,60 @@ type Location struct {
 	City City
 	Zone Zone
 }
+
+// EffectiveSchema es el esquema de atributos con el que se publica en un tipo: el de su categoría
+// raíz (Construcción define marca, modelo, potencia…) más el propio del tipo, que agrega campos o
+// redefine los de la raíz. "required" se une; si alguno cierra los campos extra
+// (additionalProperties: false), el resultado también. Una raíz no hereda nada.
+func (c Category) EffectiveSchema(parent Category) json.RawMessage {
+	if c.ParentID == "" || c.ParentID != parent.ID {
+		return c.AttributesSchema
+	}
+	var root, own map[string]any
+	if json.Unmarshal(parent.AttributesSchema, &root) != nil || json.Unmarshal(c.AttributesSchema, &own) != nil || root == nil {
+		return c.AttributesSchema // el validador rechazará un esquema roto
+	}
+	merged := make(map[string]any, len(root)+len(own))
+	for k, v := range root {
+		merged[k] = v
+	}
+	for k, v := range own {
+		switch k {
+		case "properties", "required", "additionalProperties":
+		default:
+			merged[k] = v
+		}
+	}
+	props := map[string]any{}
+	for _, schema := range []map[string]any{root, own} {
+		if p, ok := schema["properties"].(map[string]any); ok {
+			for name, def := range p {
+				props[name] = def
+			}
+		}
+	}
+	merged["properties"] = props
+	var required []any
+	seen := map[any]bool{}
+	for _, schema := range []map[string]any{root, own} {
+		if r, ok := schema["required"].([]any); ok {
+			for _, name := range r {
+				if !seen[name] {
+					seen[name] = true
+					required = append(required, name)
+				}
+			}
+		}
+	}
+	if len(required) > 0 {
+		merged["required"] = required
+	}
+	if root["additionalProperties"] == false || own["additionalProperties"] == false {
+		merged["additionalProperties"] = false
+	}
+	out, err := json.Marshal(merged)
+	if err != nil {
+		return c.AttributesSchema
+	}
+	return out
+}
