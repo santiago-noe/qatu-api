@@ -723,6 +723,139 @@ paths:
         "204": { description: Quitado. }
         "404": { $ref: "#/components/responses/Error" }
 
+  /me/listings/{id}/photos:
+    get:
+      operationId: listPhotos
+      tags: [Arrendador]
+      summary: Fotos de la publicación
+      description: Públicas en su orden (la primera es la portada) y luego la de la placa, con URL firmada de 5 minutos.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photos]
+                properties:
+                  photos:
+                    type: array
+                    items: { $ref: "#/components/schemas/Photo" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: requestPhotoUpload
+      tags: [Arrendador]
+      summary: Pedir la subida de una foto
+      description: |
+        Registra la foto (pendiente) y devuelve una URL firmada de 15 minutos. El navegador hace el
+        `PUT` directo al almacenamiento con esas cabeceras exactas y luego llama a `.../complete`.
+        Hasta 12 fotos públicas; una placa nueva reemplaza la anterior.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, content_type, size]
+              properties:
+                kind: { type: string, enum: [public, serial] }
+                content_type: { type: string, enum: [image/jpeg, image/png, image/webp] }
+                size: { type: integer, minimum: 1, maximum: 10485760, description: Bytes. }
+      responses:
+        "201":
+          description: Lista para subir.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photo, upload]
+                properties:
+                  photo: { $ref: "#/components/schemas/Photo" }
+                  upload:
+                    type: object
+                    required: [method, url, headers, expires_at]
+                    properties:
+                      method: { type: string, enum: [PUT] }
+                      url: { type: string, format: uri }
+                      headers: { type: object, additionalProperties: { type: string } }
+                      expires_at: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/photos/order:
+    put:
+      operationId: reorderPhotos
+      tags: [Arrendador]
+      summary: Ordenar las fotos públicas
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string, format: uuid }, description: Todas las públicas una vez; la primera es la portada. }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photos]
+                properties:
+                  photos:
+                    type: array
+                    items: { $ref: "#/components/schemas/Photo" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/photos/{photo}/complete:
+    post:
+      operationId: completePhotoUpload
+      tags: [Arrendador]
+      summary: Confirmar que la foto terminó de subirse
+      description: |
+        Encola su procesamiento: 3 anchos (320, 800 y 1600 px) en JPEG, enderezada según su EXIF y
+        sin metadatos (el original, que puede traer la ubicación GPS, se borra). Repetirlo no la
+        procesa dos veces.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+        - $ref: "#/components/parameters/PhotoId"
+      responses:
+        "202":
+          description: Se procesa en segundo plano.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Photo" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/listings/{id}/photos/{photo}:
+    delete:
+      operationId: deletePhoto
+      tags: [Arrendador]
+      summary: Quitar una foto
+      description: Una publicación publicada o pausada no puede quedar con menos de 3 fotos públicas.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+        - $ref: "#/components/parameters/PhotoId"
+      responses:
+        "204": { description: Quitada con sus archivos. }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
   /catalog/categories:
     get:
       operationId: listCategories
@@ -1261,6 +1394,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PhotoId:
+      name: photo
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     CategoryId:
       name: id
       in: path
@@ -1423,6 +1561,21 @@ components:
             version: { type: integer }
             created_at: { type: string, format: date-time }
             updated_at: { type: string, format: date-time }
+
+    Photo:
+      type: object
+      required: [id, kind, status, sort_order, urls]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [public, serial] }
+        status: { type: string, enum: [pending, ready, failed] }
+        width: { type: integer }
+        height: { type: integer }
+        sort_order: { type: integer }
+        urls:
+          type: object
+          description: Por ancho ("320", "800", "1600"); vacío mientras se procesa.
+          additionalProperties: { type: string, format: uri }
 
     AvailabilityBlock:
       type: object
