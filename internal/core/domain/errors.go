@@ -93,4 +93,6 @@ var (
 	ErrRejectionReason         = errors.New("escribe el motivo del rechazo (hasta 500 caracteres)")
 	ErrAvailabilityOverlap     = errors.New("esas fechas se cruzan con otro bloqueo o reserva")
 	ErrAvailabilityPeriod      = errors.New("el periodo no es válido: el fin debe ser después del inicio")
+	ErrListingCategoryLocked   = errors.New("la categoría no se cambia después de publicar: duplica la publicación y elige otra")
+	ErrListingOwnerLocation    = errors.New("tu perfil de arrendador está en un distrito que ya no atendemos: actualízalo")
 )
