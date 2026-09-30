@@ -59,6 +59,8 @@ const (
 	ConsentTerms     ConsentPurpose = "terms"
 	ConsentPrivacy   ConsentPurpose = "privacy"
 	ConsentMarketing ConsentPurpose = "marketing"
+	// Condiciones de arrendador: se aceptan al activar el perfil (feature 003).
+	ConsentLenderTerms ConsentPurpose = "lender_terms"
 )
 
 // User es la persona, independiente de cómo inicia sesión.
