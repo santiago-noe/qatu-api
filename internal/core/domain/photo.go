@@ -35,6 +35,9 @@ const (
 	PhotoUploadTTL = 15 * time.Minute
 	// SerialPhotoURLTTL: la foto de la placa se ve con una URL firmada de corta duración.
 	SerialPhotoURLTTL = 5 * time.Minute
+	// StalePhotoAge: una subida pedida y no completada en este tiempo se da por abandonada (la URL
+	// firmada ya venció hace rato). Una en proceso nunca llega a tanto.
+	StalePhotoAge = 2 * time.Hour
 )
 
 // PhotoSizes son los anchos que se generan (miniatura, ficha y pantalla completa). Nunca se amplía.
