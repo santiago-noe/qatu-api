@@ -29,6 +29,8 @@ type Handlers struct {
 	// Listing: perfil de arrendador y sus publicaciones (feature 003).
 	Listing *handler.ListingHandler
 	Photo   *handler.PhotoHandler
+	// Moderation: cola de publicaciones en revisión (feature 003).
+	Moderation *handler.ModerationHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -113,6 +115,12 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Put("/listings/:id/photos/order", h.Photo.Reorder)
 	me.Post("/listings/:id/photos/:photo/complete", h.Photo.CompleteUpload)
 	me.Delete("/listings/:id/photos/:photo", h.Photo.Delete)
+
+	// Moderación: moderadores y admins, con segundo paso.
+	moderation := v1.Group("/moderation", staff(m, domain.RoleModerator, domain.RoleAdmin)...)
+	moderation.Get("/listings", h.Moderation.Queue)
+	moderation.Post("/listings/:id/approve", h.Moderation.Approve)
+	moderation.Post("/listings/:id/reject", h.Moderation.Reject)
 
 	admin := v1.Group("/admin", staff(m, domain.RoleAdmin)...)
 	admin.Get("/users", h.Admin.Find)
