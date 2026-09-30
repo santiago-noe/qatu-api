@@ -28,6 +28,7 @@ type Handlers struct {
 	AdminCatalog *handler.AdminCatalogHandler
 	// Listing: perfil de arrendador y sus publicaciones (feature 003).
 	Listing *handler.ListingHandler
+	Photo   *handler.PhotoHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -107,6 +108,11 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Get("/listings/:id/availability", h.Listing.Calendar)
 	me.Post("/listings/:id/availability", h.Listing.BlockDates)
 	me.Delete("/listings/:id/availability/:block", h.Listing.UnblockDates)
+	me.Get("/listings/:id/photos", h.Photo.List)
+	me.Post("/listings/:id/photos", h.Photo.RequestUpload)
+	me.Put("/listings/:id/photos/order", h.Photo.Reorder)
+	me.Post("/listings/:id/photos/:photo/complete", h.Photo.CompleteUpload)
+	me.Delete("/listings/:id/photos/:photo", h.Photo.Delete)
 
 	admin := v1.Group("/admin", staff(m, domain.RoleAdmin)...)
 	admin.Get("/users", h.Admin.Find)
