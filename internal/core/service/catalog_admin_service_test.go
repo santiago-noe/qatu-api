@@ -19,15 +19,20 @@ type memoryCatalogAdmin struct {
 	categories map[string]domain.Category
 	cities     map[string]domain.City
 	scopes     map[string]*bool
+	zones      map[string]domain.Zone // ciudad|slug
 	settings   map[string]domain.Setting
 	audits     []domain.AuditEntry
 	nextID     int
+	overlap    float64 // lo que responde ZoneOverlap
 }
 
 func newMemoryCatalogAdmin() *memoryCatalogAdmin {
 	m := &memoryCatalogAdmin{
 		categories: map[string]domain.Category{}, scopes: map[string]*bool{}, settings: map[string]domain.Setting{},
-		cities: map[string]domain.City{"ayacucho": {ID: "city-1", Slug: "ayacucho", Enabled: true}},
+		cities: map[string]domain.City{"ayacucho": {ID: "city-1", Slug: "ayacucho", Name: "Ayacucho", Region: "Ayacucho",
+			Ubigeo: "0501", Center: domain.GeoPoint{Lat: -13.1631, Lng: -74.2236}, Enabled: true}},
+		zones: map[string]domain.Zone{"city-1|ayacucho": {ID: "z1", CityID: "city-1", Slug: "ayacucho", Name: "Ayacucho",
+			Ubigeo: "050101", Enabled: true, HasBoundary: true}},
 	}
 	m.categories["c1"] = domain.Category{ID: "c1", Vertical: domain.VerticalRental, Slug: "construccion", Name: "Construcción",
 		AttributesSchema: json.RawMessage(`{"type":"object"}`), RiskLevel: domain.RiskMedium, Enabled: true}
@@ -87,13 +92,19 @@ func (m *memoryCatalogAdmin) FindCityBySlug(_ context.Context, slug string) (dom
 	return c, nil
 }
 
-func (m *memoryCatalogAdmin) SetCityEnabled(_ context.Context, id string, enabled bool, a domain.AuditEntry) error {
-	for slug, c := range m.cities {
-		if c.ID == id {
-			c.Enabled = enabled
-			m.cities[slug] = c
-		}
+func (m *memoryCatalogAdmin) CreateCity(_ context.Context, c domain.City, a domain.AuditEntry) (string, error) {
+	if _, ok := m.cities[c.Slug]; ok {
+		return "", domain.ErrCityTaken
 	}
+	m.nextID++
+	c.ID = fmt.Sprintf("city-new-%d", m.nextID)
+	m.cities[c.Slug] = c
+	m.audits = append(m.audits, a)
+	return c.ID, nil
+}
+
+func (m *memoryCatalogAdmin) UpdateCity(_ context.Context, c domain.City, a domain.AuditEntry) error {
+	m.cities[c.Slug] = c
 	m.audits = append(m.audits, a)
 	return nil
 }
@@ -102,6 +113,59 @@ func (m *memoryCatalogAdmin) SetCategoryCityScope(_ context.Context, categoryID,
 	m.scopes[categoryID+"|"+cityID] = enabled
 	m.audits = append(m.audits, a)
 	return nil
+}
+
+func (m *memoryCatalogAdmin) CategoryCityScopes(_ context.Context, categoryID string) ([]domain.CategoryCityScope, error) {
+	var out []domain.CategoryCityScope
+	for _, c := range m.cities {
+		out = append(out, domain.CategoryCityScope{City: c, Override: m.scopes[categoryID+"|"+c.ID]})
+	}
+	return out, nil
+}
+
+func (m *memoryCatalogAdmin) ListAllZones(_ context.Context, cityID string) ([]domain.Zone, error) {
+	var out []domain.Zone
+	for _, z := range m.zones {
+		if z.CityID == cityID {
+			out = append(out, z)
+		}
+	}
+	return out, nil
+}
+
+func (m *memoryCatalogAdmin) FindZone(_ context.Context, cityID, slug string) (domain.Zone, error) {
+	z, ok := m.zones[cityID+"|"+slug]
+	if !ok {
+		return domain.Zone{}, domain.ErrNotFound
+	}
+	z.Boundary = nil
+	return z, nil
+}
+
+func (m *memoryCatalogAdmin) CreateZone(_ context.Context, z domain.Zone, a domain.AuditEntry) (string, error) {
+	if _, ok := m.zones[z.CityID+"|"+z.Slug]; ok {
+		return "", domain.ErrZoneTaken
+	}
+	m.nextID++
+	z.ID = fmt.Sprintf("zone-%d", m.nextID)
+	z.HasBoundary = z.Boundary != nil
+	m.zones[z.CityID+"|"+z.Slug] = z
+	m.audits = append(m.audits, a)
+	return z.ID, nil
+}
+
+func (m *memoryCatalogAdmin) UpdateZone(_ context.Context, z domain.Zone, a domain.AuditEntry) error {
+	k := z.CityID + "|" + z.Slug
+	if z.Boundary == nil {
+		z.Boundary = m.zones[k].Boundary
+	}
+	m.zones[k] = z
+	m.audits = append(m.audits, a)
+	return nil
+}
+
+func (m *memoryCatalogAdmin) ZoneOverlap(context.Context, string, string, json.RawMessage) (float64, error) {
+	return m.overlap, nil
 }
 
 func (m *memoryCatalogAdmin) ListSettings(context.Context) ([]domain.Setting, error) {
@@ -208,12 +272,12 @@ func TestAdminCityAndScope(t *testing.T) {
 	svc, repo, _ := newCatalogAdminFixture()
 	ctx := context.Background()
 
-	city, err := svc.SetCityEnabled(ctx, "admin-1", "ayacucho", false, "")
+	city, err := svc.UpdateCity(ctx, "admin-1", "ayacucho", CityPatch{Enabled: ptr(false)}, "")
 	if err != nil || city.Enabled || repo.cities["ayacucho"].Enabled {
-		t.Fatalf("SetCityEnabled = %+v, %v", city, err)
+		t.Fatalf("UpdateCity = %+v, %v", city, err)
 	}
 	n := len(repo.audits)
-	if _, err := svc.SetCityEnabled(ctx, "admin-1", "ayacucho", false, ""); err != nil || len(repo.audits) != n {
+	if _, err := svc.UpdateCity(ctx, "admin-1", "ayacucho", CityPatch{Enabled: ptr(false)}, ""); err != nil || len(repo.audits) != n {
 		t.Fatal("apagar una ciudad ya apagada no audita de nuevo")
 	}
 

@@ -18,9 +18,14 @@ type CatalogAdmin interface {
 	Categories(ctx context.Context, vertical domain.Vertical) ([]domain.Category, error)
 	CreateCategory(ctx context.Context, actorID string, in domain.Category, ip string) (domain.Category, error)
 	UpdateCategory(ctx context.Context, actorID, id string, p service.CategoryPatch, ip string) (domain.Category, error)
-	Cities(ctx context.Context) ([]domain.City, error)
-	SetCityEnabled(ctx context.Context, actorID, citySlug string, enabled bool, ip string) (domain.City, error)
 	SetCategoryCityScope(ctx context.Context, actorID, categoryID, citySlug string, enabled *bool, ip string) error
+	CategoryCities(ctx context.Context, categoryID string) (domain.Category, []domain.CategoryCityScope, error)
+	Cities(ctx context.Context) ([]domain.City, error)
+	CreateCity(ctx context.Context, actorID string, in domain.City, ip string) (domain.City, error)
+	UpdateCity(ctx context.Context, actorID, citySlug string, p service.CityPatch, ip string) (domain.City, error)
+	Zones(ctx context.Context, citySlug string) (domain.City, []domain.Zone, error)
+	CreateZone(ctx context.Context, actorID, citySlug string, in domain.Zone, ip string) (domain.Zone, error)
+	UpdateZone(ctx context.Context, actorID, citySlug, zoneSlug string, p service.ZonePatch, ip string) (domain.Zone, error)
 	Settings(ctx context.Context) ([]domain.Setting, error)
 	SetSetting(ctx context.Context, actorID string, in service.SettingInput, ip string) (domain.Setting, error)
 	SettingHistory(ctx context.Context, key string, limit int) ([]domain.SettingChange, error)
@@ -93,6 +98,15 @@ type updateCategoryRequest struct {
 
 type enabledRequest struct {
 	Enabled *bool `json:"enabled"` // en el alcance por ciudad, null vuelve al valor global
+}
+
+// categoryCityResponse: cómo está la categoría en una ciudad. Override null = sigue el valor global.
+type categoryCityResponse struct {
+	City        string `json:"city"`
+	Name        string `json:"name"`
+	CityEnabled bool   `json:"city_enabled"`
+	Override    *bool  `json:"override"`
+	Active      bool   `json:"active"`
 }
 
 type setSettingRequest struct {
@@ -197,46 +211,18 @@ func (h *AdminCatalogHandler) SetCategoryCityScope(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// adminCityResponse: el admin ve también las ciudades apagadas.
-type adminCityResponse struct {
-	ID      string `json:"id"`
-	Slug    string `json:"slug"`
-	Name    string `json:"name"`
-	Region  string `json:"region"`
-	Enabled bool   `json:"enabled"`
-}
-
-func toAdminCity(c domain.City) adminCityResponse {
-	return adminCityResponse{ID: c.ID, Slug: c.Slug, Name: c.Name, Region: c.Region, Enabled: c.Enabled}
-}
-
-// GET /api/v1/admin/cities
-func (h *AdminCatalogHandler) Cities(c fiber.Ctx) error {
-	cities, err := h.admin.Cities(c.Context())
+// GET /api/v1/admin/catalog/categories/:id/cities
+func (h *AdminCatalogHandler) CategoryCities(c fiber.Ctx) error {
+	category, scopes, err := h.admin.CategoryCities(c.Context(), c.Params("id"))
 	if err != nil {
 		return err
 	}
-	out := make([]adminCityResponse, len(cities))
-	for i, city := range cities {
-		out[i] = toAdminCity(city)
+	out := make([]categoryCityResponse, len(scopes))
+	for i, s := range scopes {
+		out[i] = categoryCityResponse{City: s.City.Slug, Name: s.City.Name, CityEnabled: s.City.Enabled,
+			Override: s.Override, Active: s.ActiveFor(category)}
 	}
 	return c.JSON(fiber.Map{"cities": out})
-}
-
-// PATCH /api/v1/admin/cities/:slug {"enabled": true|false}
-func (h *AdminCatalogHandler) SetCityEnabled(c fiber.Ctx) error {
-	var req enabledRequest
-	if err := bindJSON(c, &req); err != nil {
-		return err
-	}
-	if req.Enabled == nil {
-		return badRequest("Indica enabled: true o false.")
-	}
-	city, err := h.admin.SetCityEnabled(c.Context(), actorID(c), c.Params("slug"), *req.Enabled, c.IP())
-	if err != nil {
-		return err
-	}
-	return c.JSON(toAdminCity(city))
 }
 
 // GET /api/v1/admin/settings

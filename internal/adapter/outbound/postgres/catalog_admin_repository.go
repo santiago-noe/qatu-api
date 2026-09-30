@@ -28,8 +28,14 @@ func mapCatalogError(err error) error {
 	switch {
 	case pgErr.Code == uniqueViolation && pgErr.ConstraintName == "categories_slug_per_vertical":
 		return domain.ErrSlugTaken
+	case pgErr.Code == uniqueViolation && strings.HasPrefix(pgErr.ConstraintName, "cities_"):
+		return domain.ErrCityTaken
+	case pgErr.Code == uniqueViolation && strings.HasPrefix(pgErr.ConstraintName, "zones_"):
+		return domain.ErrZoneTaken
 	case pgErr.Code == checkViolation && strings.HasPrefix(pgErr.Message, "categories:"):
 		return domain.ErrCategoryTree
+	case pgErr.Code == checkViolation && strings.HasPrefix(pgErr.ConstraintName, "zones_boundary"):
+		return domain.ErrInvalidBoundary
 	case pgErr.Code == foreignKeyViolation, pgErr.Code == invalidTextInput:
 		return domain.ErrNotFound
 	}
@@ -82,26 +88,67 @@ func (r *CatalogRepository) UpdateCategory(ctx context.Context, c domain.Categor
 		if tag.RowsAffected() == 0 {
 			return domain.ErrNotFound
 		}
-		return insertAudit(ctx, tx, audit)
+		if err := insertAudit(ctx, tx, audit); err != nil {
+			return err
+		}
+		if c.Prohibited {
+			return retireProhibitedListings(ctx, tx, c.ID, audit)
+		}
+		return nil
 	})
 	return mapCatalogError(err)
 }
 
+// retireProhibitedListings saca del catálogo las publicaciones activas de la categoría y de sus
+// tipos: quedan rechazadas con un motivo que el arrendador entiende (el trigger de 0007 impide que
+// vuelvan). Los borradores se quedan: no pueden enviarse mientras siga prohibida.
+func retireProhibitedListings(ctx context.Context, tx pgx.Tx, categoryID string, audit domain.AuditEntry) error {
+	tag, err := tx.Exec(ctx, `
+		UPDATE tool_listings SET status = 'rejected', rejection_reason = $2, version = version + 1
+		WHERE status IN ('in_review', 'published', 'paused')
+		  AND category_id IN (SELECT id FROM categories WHERE id = $1 OR parent_id = $1)`,
+		categoryID, domain.ProhibitedCategoryReason)
+	if err != nil || tag.RowsAffected() == 0 {
+		return err
+	}
+	return insertAudit(ctx, tx, domain.AuditEntry{
+		ActorID: audit.ActorID, Action: domain.AuditListingsRetired, Entity: "category", EntityID: categoryID,
+		After: map[string]any{"listings": tag.RowsAffected()}, IP: audit.IP,
+	})
+}
+
 func (r *CatalogRepository) ListAllCities(ctx context.Context) ([]domain.City, error) {
-	return r.queryCities(ctx, citySelect+` ORDER BY name`)
+	return r.queryCities(ctx, citySelect+` ORDER BY c.name`)
 }
 
 func (r *CatalogRepository) FindCityBySlug(ctx context.Context, slug string) (domain.City, error) {
-	c, err := scanCity(r.db.Pool.QueryRow(ctx, citySelect+` WHERE slug = $1`, slug))
+	c, err := scanCity(r.db.Pool.QueryRow(ctx, citySelect+` WHERE c.slug = $1`, slug))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.City{}, domain.ErrNotFound
 	}
 	return c, err
 }
 
-func (r *CatalogRepository) SetCityEnabled(ctx context.Context, cityID string, enabled bool, audit domain.AuditEntry) error {
-	return pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE cities SET enabled = $2 WHERE id = $1`, cityID, enabled)
+func (r *CatalogRepository) CreateCity(ctx context.Context, c domain.City, audit domain.AuditEntry) (string, error) {
+	var id string
+	err := pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO cities (slug, name, region, ubigeo, center, enabled)
+			VALUES ($1, $2, $3, NULLIF($4, ''), ST_SetSRID(ST_MakePoint($5, $6), 4326), false)
+			RETURNING id`, c.Slug, c.Name, c.Region, c.Ubigeo, c.Center.Lng, c.Center.Lat).Scan(&id); err != nil {
+			return err
+		}
+		audit.EntityID = id
+		return insertAudit(ctx, tx, audit)
+	})
+	return id, mapCatalogError(err)
+}
+
+func (r *CatalogRepository) UpdateCity(ctx context.Context, c domain.City, audit domain.AuditEntry) error {
+	err := pgx.BeginFunc(ctx, r.db.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE cities SET name = $2, region = $3, center = ST_SetSRID(ST_MakePoint($4, $5), 4326), enabled = $6
+			WHERE id = $1`, c.ID, c.Name, c.Region, c.Center.Lng, c.Center.Lat, c.Enabled)
 		if err != nil {
 			return err
 		}
@@ -110,6 +157,7 @@ func (r *CatalogRepository) SetCityEnabled(ctx context.Context, cityID string, e
 		}
 		return insertAudit(ctx, tx, audit)
 	})
+	return mapCatalogError(err)
 }
 
 func (r *CatalogRepository) SetCategoryCityScope(ctx context.Context, categoryID, cityID string, enabled *bool, audit domain.AuditEntry) error {

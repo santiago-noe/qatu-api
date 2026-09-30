@@ -49,17 +49,23 @@ func (r *CatalogRepository) queryCategories(ctx context.Context, sql string, arg
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Category, error) { return scanCategory(row) })
 }
 
-const citySelect = `
-	SELECT id, slug, name, region, timezone, ST_Y(center), ST_X(center), enabled FROM cities`
+const cityColumns = `c.id, c.slug, c.name, c.region, COALESCE(c.ubigeo, ''), c.timezone, ST_Y(c.center), ST_X(c.center), c.enabled`
+
+const citySelect = `SELECT ` + cityColumns + ` FROM cities c`
+
+// cityDest son los destinos de cityColumns, en orden (una consulta puede agregar columnas después).
+func cityDest(c *domain.City) []any {
+	return []any{&c.ID, &c.Slug, &c.Name, &c.Region, &c.Ubigeo, &c.Timezone, &c.Center.Lat, &c.Center.Lng, &c.Enabled}
+}
 
 func scanCity(row pgx.Row) (domain.City, error) {
 	var c domain.City
-	err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.Region, &c.Timezone, &c.Center.Lat, &c.Center.Lng, &c.Enabled)
+	err := row.Scan(cityDest(&c)...)
 	return c, err
 }
 
 func (r *CatalogRepository) ListCities(ctx context.Context) ([]domain.City, error) {
-	return r.queryCities(ctx, citySelect+` WHERE enabled ORDER BY name`)
+	return r.queryCities(ctx, citySelect+` WHERE c.enabled ORDER BY c.name`)
 }
 
 func (r *CatalogRepository) queryCities(ctx context.Context, sql string) ([]domain.City, error) {
@@ -70,12 +76,17 @@ func (r *CatalogRepository) queryCities(ctx context.Context, sql string) ([]doma
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.City, error) { return scanCity(row) })
 }
 
-const zoneSelect = `
-	SELECT z.id, z.city_id, z.slug, z.name, COALESCE(z.ubigeo, ''), z.sort_order, z.boundary IS NOT NULL FROM zones z`
+const zoneColumns = `z.id, z.city_id, z.slug, z.name, COALESCE(z.ubigeo, ''), z.sort_order, z.enabled, z.boundary IS NOT NULL`
+
+const zoneSelect = `SELECT ` + zoneColumns + ` FROM zones z`
+
+func zoneDest(z *domain.Zone) []any {
+	return []any{&z.ID, &z.CityID, &z.Slug, &z.Name, &z.Ubigeo, &z.SortOrder, &z.Enabled, &z.HasBoundary}
+}
 
 func scanZone(row pgx.Row) (domain.Zone, error) {
 	var z domain.Zone
-	err := row.Scan(&z.ID, &z.CityID, &z.Slug, &z.Name, &z.Ubigeo, &z.SortOrder, &z.HasBoundary)
+	err := row.Scan(zoneDest(&z)...)
 	return z, err
 }
 
@@ -96,7 +107,7 @@ func (r *CatalogRepository) LocationAt(ctx context.Context, p domain.GeoPoint) (
 	if err != nil {
 		return domain.Location{}, err
 	}
-	city, err := scanCity(r.db.Pool.QueryRow(ctx, citySelect+` WHERE id = $1`, zone.CityID))
+	city, err := scanCity(r.db.Pool.QueryRow(ctx, citySelect+` WHERE c.id = $1`, zone.CityID))
 	if err != nil {
 		return domain.Location{}, err
 	}

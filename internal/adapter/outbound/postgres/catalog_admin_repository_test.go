@@ -95,7 +95,8 @@ func TestCatalogAdminRepository(t *testing.T) {
 			t.Fatal("sin ajuste vuelve a su valor global (apagada)")
 		}
 
-		if err := repo.SetCityEnabled(ctx, city.ID, false, audit(domain.AuditCityUpdated)); err != nil {
+		city.Enabled = false
+		if err := repo.UpdateCity(ctx, city, audit(domain.AuditCityUpdated)); err != nil {
 			t.Fatal(err)
 		}
 		if cities, _ := repo.ListCities(ctx); len(cities) != 0 {
@@ -130,8 +131,9 @@ func TestCatalogAdminRepository(t *testing.T) {
 			t.Fatalf("un alcance inválido no existe: %v", err)
 		}
 		list, _ := repo.ListSettings(ctx)
-		if len(list) != 4 {
-			t.Fatalf("4 ajustes del piloto: %d", len(list))
+		// 4 comisiones (0004) y 6 de publicaciones: garantía y radio público (0006).
+		if len(list) != 10 {
+			t.Fatalf("10 ajustes del piloto: %d", len(list))
 		}
 	})
 }

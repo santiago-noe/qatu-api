@@ -98,29 +98,6 @@ func (s *CatalogAdminService) UpdateCategory(ctx context.Context, actorID, id st
 	return next, nil
 }
 
-// Cities devuelve todas las ciudades, también las apagadas (el admin las enciende).
-func (s *CatalogAdminService) Cities(ctx context.Context) ([]domain.City, error) {
-	return s.repo.ListAllCities(ctx)
-}
-
-// SetCityEnabled enciende o apaga una ciudad (feature flag).
-func (s *CatalogAdminService) SetCityEnabled(ctx context.Context, actorID, citySlug string, enabled bool, ip string) (domain.City, error) {
-	city, err := s.repo.FindCityBySlug(ctx, citySlug)
-	if err != nil || city.Enabled == enabled {
-		return city, err
-	}
-	err = s.repo.SetCityEnabled(ctx, city.ID, enabled, domain.AuditEntry{
-		ActorID: actorID, Action: domain.AuditCityUpdated, Entity: "city", EntityID: city.ID,
-		Before: map[string]any{"enabled": city.Enabled}, After: map[string]any{"enabled": enabled}, IP: ip,
-	})
-	if err != nil {
-		return domain.City{}, err
-	}
-	s.invalidate(ctx)
-	city.Enabled = enabled
-	return city, nil
-}
-
 // SetCategoryCityScope activa o desactiva una categoría solo en una ciudad; nil vuelve a su valor global.
 func (s *CatalogAdminService) SetCategoryCityScope(ctx context.Context, actorID, categoryID, citySlug string, enabled *bool, ip string) error {
 	if _, err := s.repo.FindCategory(ctx, categoryID); err != nil {

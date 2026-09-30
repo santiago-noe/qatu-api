@@ -51,22 +51,27 @@ func toCategoryResponses(list []domain.Category) []categoryResponse {
 	return out
 }
 
-type pointResponse struct {
+// geoPoint es un punto en JSON, al responder y al recibir.
+type geoPoint struct {
 	Lat float64 `json:"lat"`
 	Lng float64 `json:"lng"`
 }
 
+func toGeoPoint(p domain.GeoPoint) geoPoint { return geoPoint{Lat: p.Lat, Lng: p.Lng} }
+
+func (p geoPoint) domain() domain.GeoPoint { return domain.GeoPoint{Lat: p.Lat, Lng: p.Lng} }
+
 type cityResponse struct {
-	Slug     string        `json:"slug"`
-	Name     string        `json:"name"`
-	Region   string        `json:"region"`
-	Timezone string        `json:"timezone"`
-	Center   pointResponse `json:"center"`
+	Slug     string   `json:"slug"`
+	Name     string   `json:"name"`
+	Region   string   `json:"region"`
+	Timezone string   `json:"timezone"`
+	Center   geoPoint `json:"center"`
 }
 
 func toCityResponse(c domain.City) cityResponse {
 	return cityResponse{Slug: c.Slug, Name: c.Name, Region: c.Region, Timezone: c.Timezone,
-		Center: pointResponse{Lat: c.Center.Lat, Lng: c.Center.Lng}}
+		Center: toGeoPoint(c.Center)}
 }
 
 type zoneResponse struct {
