@@ -21,6 +21,8 @@ type countingPhotos struct {
 	done  chan string
 }
 
+func (c *countingPhotos) CleanupStale(context.Context) (int, error) { return 0, nil }
+
 func (c *countingPhotos) Process(_ context.Context, id string) error {
 	c.mu.Lock()
 	c.calls[id]++
