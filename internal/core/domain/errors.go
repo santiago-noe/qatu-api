@@ -100,4 +100,5 @@ var (
 	ErrPhotoNotUploaded        = errors.New("la foto no terminó de subirse; vuelve a intentarlo")
 	ErrPhotoInvalid            = errors.New("no pudimos leer esa imagen; prueba con otra foto")
 	ErrPhotoOrder              = errors.New("el orden debe incluir cada foto pública una sola vez")
+	ErrSelfModeration          = errors.New("no puedes moderar tus propias publicaciones")
 )
