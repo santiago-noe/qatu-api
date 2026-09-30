@@ -56,6 +56,14 @@ func (s *ModerationService) view(ctx context.Context, item domain.ReviewItem) (R
 	if err != nil {
 		return ReviewView{}, err
 	}
+	if category.ParentID != "" {
+		parent, err := s.d.Categories.FindCategory(ctx, category.ParentID)
+		if err != nil {
+			return ReviewView{}, err
+		}
+		// Moderación revisa los atributos contra lo mismo que se validó al enviar.
+		category.AttributesSchema = category.EffectiveSchema(parent)
+	}
 	photos, err := s.d.Photos.PublicPhotos(ctx, item.Listing.ID)
 	if err != nil {
 		return ReviewView{}, err
