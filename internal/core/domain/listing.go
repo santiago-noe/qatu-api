@@ -24,7 +24,7 @@ const (
 	ListingMaxMinDuration       = 720  // 30 días
 	ListingMaxMaxDuration       = 2160 // 90 días
 	RejectionReasonMax          = 500
-	ListingMaxAmount      Cents = 100_000_00 // S/ 100 000: tope de cordura para precios y valores
+	MaxAmount             Cents = 100_000_00 // S/ 100 000: tope de cordura para precios y valores
 )
 
 // ListingStatus sigue la máquina de estados de la spec 003.
@@ -90,18 +90,28 @@ func NextListingStatus(current ListingStatus, action ListingAction, needsReview 
 // borra el motivo del rechazo anterior, y la primera publicación queda fechada. El motivo de un
 // rechazo nuevo lo pone quien rechaza (moderación).
 func ApplyListingAction(l ToolListing, action ListingAction, needsReview bool, now time.Time) (ToolListing, error) {
-	status, err := NextListingStatus(l.Status, action, needsReview)
-	if err != nil {
+	if err := applyModeratedAction(&l.Status, &l.RejectionReason, &l.FirstPublishedAt, action, needsReview, now); err != nil {
 		return ToolListing{}, err
 	}
-	l.Status = status
-	if status == ListingInReview || status == ListingPublished {
-		l.RejectionReason = ""
-	}
-	if status == ListingPublished && l.FirstPublishedAt == nil {
-		l.FirstPublishedAt = &now
-	}
 	return l, nil
+}
+
+// applyModeratedAction es el ciclo de moderación que comparten las publicaciones y los perfiles de
+// proveedor (004): el nuevo estado, el motivo que se borra y la fecha de la primera publicación.
+func applyModeratedAction(status *ListingStatus, reason *string, firstPublished **time.Time,
+	action ListingAction, needsReview bool, now time.Time) error {
+	next, err := NextListingStatus(*status, action, needsReview)
+	if err != nil {
+		return err
+	}
+	*status = next
+	if next == ListingInReview || next == ListingPublished {
+		*reason = ""
+	}
+	if next == ListingPublished && *firstPublished == nil {
+		*firstPublished = &now
+	}
+	return nil
 }
 
 // ReviewItem es una publicación en la cola de moderación, con lo que el moderador necesita saber
@@ -229,7 +239,7 @@ func NormalizeListing(l ToolListing) (ToolListing, error) {
 	}
 	l.Accessories = accessories
 	for _, amount := range append(l.Prices.all(), l.ReplacementValue, l.Deposit, l.DeliveryFee) {
-		if amount < 0 || amount > ListingMaxAmount {
+		if amount < 0 || amount > MaxAmount {
 			return ToolListing{}, ErrListingAmount
 		}
 	}

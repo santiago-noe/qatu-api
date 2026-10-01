@@ -443,7 +443,7 @@ func (s *ListingService) Duplicate(ctx context.Context, ownerID, id, ip string) 
 
 // DepositSuggestion calcula la garantía sugerida y su rango para una categoría y un valor.
 func (s *ListingService) DepositSuggestion(ctx context.Context, ownerID, categoryID string, replacement domain.Cents) (domain.DepositRange, error) {
-	if replacement <= 0 || replacement > domain.ListingMaxAmount {
+	if replacement <= 0 || replacement > domain.MaxAmount {
 		return domain.DepositRange{}, domain.ErrListingAmount
 	}
 	profile, err := s.profile(ctx, ownerID)
