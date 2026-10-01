@@ -1,0 +1,25 @@
+meta {
+  name: Enviar perfil a revisión
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/me/provider/submit
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": {{providerVersion}}
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.provider) bru.setEnvVar("providerVersion", res.body.provider.version);
+}
+
+docs {
+  Hasta la primera aprobación (nivel P) siempre va a revisión.
+}
