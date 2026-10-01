@@ -66,6 +66,8 @@ type LegalConfig struct {
 	PrivacyVersion string `mapstructure:"privacy_version"`
 	// LenderTermsVersion: condiciones que se aceptan al activar el perfil de arrendador (003).
 	LenderTermsVersion string `mapstructure:"lender_terms_version"`
+	// ProviderTermsVersion: condiciones que se aceptan al activar el perfil de proveedor (004).
+	ProviderTermsVersion string `mapstructure:"provider_terms_version"`
 }
 
 // StorageConfig: almacenamiento S3 de las fotos (SeaweedFS en local, Cloudflare R2 en producción).
@@ -162,6 +164,7 @@ var defaults = map[string]any{
 	"legal.terms_version":                "borrador-2026-09",
 	"legal.privacy_version":              "borrador-2026-09",
 	"legal.lender_terms_version":         "borrador-2026-09",
+	"legal.provider_terms_version":       "borrador-2026-09",
 	"smtp.host":                          "localhost",
 	"smtp.port":                          1025,
 	"smtp.username":                      "",
