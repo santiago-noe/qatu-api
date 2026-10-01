@@ -31,6 +31,8 @@ tags:
     description: Feature 001. Perfil, contraseña, sesiones y ubicación de la persona.
   - name: Arrendador
     description: Feature 003. Perfil de arrendador, publicaciones propias y su calendario.
+  - name: Proveedor
+    description: Feature 004. Perfil de proveedor de servicios, su horario y sus días bloqueados.
   - name: Catálogo público
     description: Feature 002. Sin sesión y con caché (se invalida al editar desde el admin).
   - name: Moderación
@@ -858,6 +860,177 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
 
+  /me/provider:
+    get:
+      operationId: getProvider
+      tags: [Proveedor]
+      summary: Mi perfil de proveedor
+      responses:
+        "200":
+          description: "`provider` es null si aún no lo activó."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider]
+                properties:
+                  provider:
+                    oneOf:
+                      - $ref: "#/components/schemas/Provider"
+                      - type: "null"
+    post:
+      operationId: activateProvider
+      tags: [Proveedor]
+      summary: Activar mi perfil de proveedor (borrador)
+      description: |
+        Exige el correo verificado y `accept_terms` (queda el consentimiento versionado). Se puede
+        guardar incompleto; lo obligatorio se revisa al enviarlo. Un perfil por persona: 409
+        `perfil_proveedor_existente` si ya tiene uno. `warranty_days` omitido = 15.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ProviderFields"
+                - type: object
+                  required: [accept_terms]
+                  properties:
+                    accept_terms: { type: boolean }
+      responses:
+        "201": { $ref: "#/components/responses/Provider" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: updateProvider
+      tags: [Proveedor]
+      summary: Editar mi perfil de proveedor
+      description: |
+        El formulario completo con la versión leída. En revisión no se edita (409
+        `perfil_no_editable`); publicado o pausado debe seguir completo. Un paquete sin `id` es
+        nuevo; los que faltan se borran.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ProviderFields"
+                - type: object
+                  required: [version]
+                  properties:
+                    version: { type: integer }
+      responses:
+        "200": { $ref: "#/components/responses/Provider" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/provider/submit:
+    post:
+      operationId: submitProvider
+      tags: [Proveedor]
+      summary: Enviar mi perfil a revisión
+      description: |
+        Revisa descripción (30+ caracteres), al menos un oficio vigente, un distrito y una franja
+        del horario. Hasta la primera aprobación de moderación (revisión del nivel P) siempre va a
+        revisión, igual que si lo habían rechazado.
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Provider" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/provider/pause:
+    post:
+      operationId: pauseProvider
+      tags: [Proveedor]
+      summary: Pausar mi perfil publicado
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Provider" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /me/provider/resume:
+    post:
+      operationId: resumeProvider
+      tags: [Proveedor]
+      summary: Volver a mostrar mi perfil pausado
+      description: Solo si sus oficios y distritos siguen vigentes y está completo.
+      requestBody: { $ref: "#/components/requestBodies/Version" }
+      responses:
+        "200": { $ref: "#/components/responses/Provider" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/provider/availability:
+    get:
+      operationId: providerCalendar
+      tags: [Proveedor]
+      summary: Días bloqueados en una ventana (hasta 13 meses)
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [blocks]
+                properties:
+                  blocks:
+                    type: array
+                    items: { $ref: "#/components/schemas/AvailabilityBlock" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: blockProviderDates
+      tags: [Proveedor]
+      summary: Bloquear días
+      description: "El fin no se incluye. 409 `fechas_ocupadas` si se cruza con otro bloqueo o un trabajo."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start, end]
+              properties:
+                start: { type: string, format: date-time }
+                end: { type: string, format: date-time }
+                note: { type: string, maxLength: 200 }
+      responses:
+        "201":
+          description: Bloqueado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilityBlock" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /me/provider/availability/{block}:
+    delete:
+      operationId: unblockProviderDates
+      tags: [Proveedor]
+      summary: Quitar un bloqueo manual
+      description: Los trabajos no se quitan desde el calendario.
+      parameters:
+        - { name: block, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Quitado. }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /catalog/categories:
     get:
       operationId: listCategories
@@ -1489,6 +1662,15 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Listing" }
+    Provider:
+      description: El perfil de proveedor.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [provider]
+            properties:
+              provider: { $ref: "#/components/schemas/Provider" }
     Error:
       description: Error con código estable.
       content:
@@ -1673,8 +1855,96 @@ components:
         id: { type: string, format: uuid }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time, description: No incluido. }
-        reason: { type: string, enum: [manual, booking, hold] }
+        reason:
+          type: string
+          enum: [manual, booking, hold, job]
+          description: booking y hold son de publicaciones (006); job, trabajos del proveedor (009).
         note: { type: string }
+
+    ServicePackage:
+      type: object
+      required: [title, price, duration_minutes]
+      properties:
+        id: { type: string, format: uuid, description: Vacío en un paquete nuevo. }
+        title: { type: string, minLength: 5, maxLength: 80, examples: ["Cambio de grifería"] }
+        description: { type: string, maxLength: 500 }
+        price: { type: integer, minimum: 1, maximum: 10000000, description: Céntimos. }
+        duration_minutes: { type: integer, minimum: 30, maximum: 480, multipleOf: 30 }
+
+    ProviderTrade:
+      type: object
+      required: [category_id]
+      properties:
+        category_id: { type: string, format: uuid, description: Un oficio (categoría raíz de la vertical service) activo en la ciudad. }
+        hourly_rate: { type: integer, minimum: 0, maximum: 10000000, description: "Céntimos; 0 = sin tarifa por hora." }
+        min_hours: { type: integer, minimum: 1, maximum: 8 }
+        packages:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/ServicePackage" }
+        quote_only: { type: boolean, readOnly: true, description: "Sin tarifa ni paquetes: solo recibe solicitudes de cotización (008)." }
+
+    WeeklySlot:
+      type: object
+      required: [weekday, start, end]
+      description: Franja en la hora local de la ciudad, en medias horas; el fin no se incluye.
+      properties:
+        weekday: { type: integer, minimum: 1, maximum: 7, description: ISO 8601 (1 = lunes). }
+        start: { type: string, pattern: "^[0-9]{2}:[0-9]{2}$", examples: ["08:00"] }
+        end: { type: string, pattern: "^[0-9]{2}:[0-9]{2}$", examples: ["17:30"], description: '"24:00" = fin del día.' }
+
+    ProviderFields:
+      type: object
+      required: [phone, city]
+      properties:
+        business_name: { type: string, minLength: 2, maxLength: 80, description: Nombre comercial opcional. }
+        phone: { type: string, examples: ["987 654 321"], description: "Celular peruano; privado hasta confirmar un trabajo." }
+        city: { type: string, examples: [ayacucho] }
+        bio: { type: string, maxLength: 2000 }
+        years_experience: { type: integer, minimum: 0, maximum: 60 }
+        warranty_days: { type: integer, minimum: 0, maximum: 90, description: Días de garantía del trabajo. }
+        accepts_urgent: { type: boolean, description: Acepta trabajos urgentes el mismo día. }
+        trades:
+          type: array
+          maxItems: 5
+          items: { $ref: "#/components/schemas/ProviderTrade" }
+        coverage_zone_ids:
+          type: array
+          maxItems: 30
+          items: { type: string, format: uuid }
+        weekly:
+          type: array
+          description: Hasta 3 franjas por día, sin cruces.
+          items: { $ref: "#/components/schemas/WeeklySlot" }
+
+    Provider:
+      type: object
+      required: [phone, city, bio, years_experience, warranty_days, accepts_urgent, trades, coverage_zone_ids,
+                 weekly, status, version, created_at, updated_at]
+      properties:
+        business_name: { type: string }
+        phone: { type: string, examples: ["+51987654321"] }
+        city: { $ref: "#/components/schemas/PlaceRef" }
+        bio: { type: string }
+        years_experience: { type: integer }
+        warranty_days: { type: integer }
+        accepts_urgent: { type: boolean }
+        trades:
+          type: array
+          items: { $ref: "#/components/schemas/ProviderTrade" }
+        coverage_zone_ids:
+          type: array
+          items: { type: string, format: uuid }
+        weekly:
+          type: array
+          items: { $ref: "#/components/schemas/WeeklySlot" }
+        status: { type: string, enum: [draft, in_review, published, paused, rejected] }
+        rejection_reason: { type: string }
+        verified_at: { type: string, format: date-time, description: "Nivel P: la primera aprobación de moderación." }
+        first_published_at: { type: string, format: date-time }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     AdminUser:
       allOf:

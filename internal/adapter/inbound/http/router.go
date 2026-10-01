@@ -31,6 +31,8 @@ type Handlers struct {
 	Photo   *handler.PhotoHandler
 	// Moderation: cola de publicaciones en revisión (feature 003).
 	Moderation *handler.ModerationHandler
+	// Provider: perfil de proveedor de servicios (feature 004).
+	Provider *handler.ProviderHandler
 }
 
 // Middlewares compartidos que dependen de servicios (se construyen en cmd/server).
@@ -115,6 +117,18 @@ func NewRouter(log zerolog.Logger, h Handlers, m Middlewares, opts Options) *fib
 	me.Put("/listings/:id/photos/order", h.Photo.Reorder)
 	me.Post("/listings/:id/photos/:photo/complete", h.Photo.CompleteUpload)
 	me.Delete("/listings/:id/photos/:photo", h.Photo.Delete)
+
+	// Proveedor (feature 004): como el arrendador, decide el perfil en la base. El rol provider
+	// llega con la aprobación de moderación (nivel P).
+	me.Get("/provider", h.Provider.Get)
+	me.Post("/provider", h.Provider.Activate)
+	me.Put("/provider", h.Provider.Update)
+	me.Post("/provider/submit", h.Provider.Submit)
+	me.Post("/provider/pause", h.Provider.Pause)
+	me.Post("/provider/resume", h.Provider.Resume)
+	me.Get("/provider/availability", h.Provider.Calendar)
+	me.Post("/provider/availability", h.Provider.BlockDates)
+	me.Delete("/provider/availability/:block", h.Provider.UnblockDates)
 
 	// Moderación: moderadores y admins, con segundo paso.
 	moderation := v1.Group("/moderation", staff(m, domain.RoleModerator, domain.RoleAdmin)...)
