@@ -1,0 +1,27 @@
+meta {
+  name: Bloquear días
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/me/provider/availability
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "start": "2026-11-01T00:00:00-05:00",
+    "end": "2026-11-03T00:00:00-05:00",
+    "note": "Viaje"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) bru.setEnvVar("blockId", res.body.id);
+}
+
+docs {
+  El fin no se incluye.
+}
