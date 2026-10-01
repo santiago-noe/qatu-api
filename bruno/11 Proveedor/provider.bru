@@ -1,0 +1,15 @@
+meta {
+  name: Mi perfil de proveedor
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/me/provider
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.provider) bru.setEnvVar("providerVersion", res.body.provider.version);
+}
