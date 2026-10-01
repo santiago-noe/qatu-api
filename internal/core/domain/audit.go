@@ -51,4 +51,11 @@ const (
 	AuditListingUnblocked = "listing.dates_unblocked"
 	AuditListingApproved  = "listing.approved"
 	AuditListingRejected  = "listing.rejected"
+
+	// Perfiles de proveedores (feature 004).
+	AuditProviderActivated = "provider.activated"
+	AuditProviderUpdated   = "provider.updated"
+	AuditProviderStatus    = "provider.status_changed"
+	AuditProviderBlocked   = "provider.dates_blocked"
+	AuditProviderUnblocked = "provider.dates_unblocked"
 )
