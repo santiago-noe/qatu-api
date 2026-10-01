@@ -13,6 +13,7 @@ const (
 	BlockManual  BlockReason = "manual"  // el arrendador bloqueó las fechas
 	BlockBooking BlockReason = "booking" // una reserva confirmada (006)
 	BlockHold    BlockReason = "hold"    // una reserva en curso de pago (006)
+	BlockJob     BlockReason = "job"     // un trabajo programado del proveedor (009)
 )
 
 // Límites del calendario del arrendador.
