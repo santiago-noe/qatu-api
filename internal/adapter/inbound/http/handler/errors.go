@@ -121,6 +121,26 @@ var domainErrors = []struct {
 	{domain.ErrPhotoOrder, fiber.StatusUnprocessableEntity, "orden_invalido_fotos"},
 	{domain.ErrRejectionReason, fiber.StatusUnprocessableEntity, "motivo_rechazo_requerido"},
 	{domain.ErrSelfModeration, fiber.StatusForbidden, "moderacion_propia"},
+	{domain.ErrProviderProfileRequired, fiber.StatusForbidden, "perfil_proveedor_requerido"},
+	{domain.ErrProviderExists, fiber.StatusConflict, "perfil_proveedor_existente"},
+	{domain.ErrProviderEmailUnverified, fiber.StatusForbidden, "correo_no_verificado"},
+	{domain.ErrProviderTermsRequired, fiber.StatusUnprocessableEntity, "condiciones_requeridas"},
+	{domain.ErrProviderBusinessName, fiber.StatusUnprocessableEntity, "nombre_comercial_invalido"},
+	{domain.ErrProviderBio, fiber.StatusUnprocessableEntity, "texto_largo"},
+	{domain.ErrProviderBioRequired, fiber.StatusUnprocessableEntity, "descripcion_requerida"},
+	{domain.ErrProviderExperience, fiber.StatusUnprocessableEntity, "experiencia_invalida"},
+	{domain.ErrProviderWarranty, fiber.StatusUnprocessableEntity, "garantia_trabajo_invalida"},
+	{domain.ErrProviderTrade, fiber.StatusUnprocessableEntity, "oficio_invalido"},
+	{domain.ErrProviderTradesRequired, fiber.StatusUnprocessableEntity, "oficio_requerido"},
+	{domain.ErrProviderRate, fiber.StatusUnprocessableEntity, "tarifa_invalida"},
+	{domain.ErrProviderPackage, fiber.StatusUnprocessableEntity, "paquete_invalido"},
+	{domain.ErrProviderCoverage, fiber.StatusUnprocessableEntity, "cobertura_invalida"},
+	{domain.ErrProviderSchedule, fiber.StatusUnprocessableEntity, "horario_invalido"},
+	{domain.ErrProviderScheduleRequired, fiber.StatusUnprocessableEntity, "horario_requerido"},
+	// Los mismos códigos que en las publicaciones: la app los trata igual.
+	{domain.ErrProviderTransition, fiber.StatusConflict, "transicion_invalida"},
+	{domain.ErrProviderNotEditable, fiber.StatusConflict, "perfil_no_editable"},
+	{domain.ErrProviderVersion, fiber.StatusConflict, "version_desactualizada"},
 }
 
 // toAPIError convierte cualquier error en una respuesta segura; lo desconocido es un 500 sin detalles.
