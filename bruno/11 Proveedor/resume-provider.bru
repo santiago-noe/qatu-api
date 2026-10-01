@@ -1,0 +1,21 @@
+meta {
+  name: Reanudar perfil
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/me/provider/resume
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": {{providerVersion}}
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.provider) bru.setEnvVar("providerVersion", res.body.provider.version);
+}
