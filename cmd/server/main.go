@@ -162,6 +162,10 @@ func run() error {
 	moderation := service.NewModerationService(service.ModerationDeps{
 		Listings: listingRepo, Categories: catalogRepo, Accounts: accounts, Photos: photos, Mailer: mailer, Clock: clock,
 	})
+	providers := service.NewProviderService(service.ProviderDeps{
+		Accounts: accounts, Providers: postgres.NewProviderRepository(db), Catalog: catalog, Clock: clock, IDs: ids,
+		TermsVersion: cfg.Legal.ProviderTermsVersion,
+	})
 
 	// Adaptadores de entrada.
 	app := apihttp.NewRouter(log,
@@ -180,6 +184,7 @@ func run() error {
 			Listing:      handler.NewListingHandler(lenders, listings),
 			Photo:        handler.NewPhotoHandler(photos),
 			Moderation:   handler.NewModerationHandler(moderation),
+			Provider:     handler.NewProviderHandler(providers),
 		},
 		apihttp.Middlewares{
 			Session: middleware.SessionAuth(sessions, cfg.Session.CookieName),
