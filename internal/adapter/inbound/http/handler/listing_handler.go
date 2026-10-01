@@ -320,17 +320,18 @@ func (h *ListingHandler) Duplicate(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toListingResponse(l))
 }
 
-// GET /api/v1/me/listings/:id/availability?from=2026-10-01T00:00:00-05:00&to=...
-func (h *ListingHandler) Calendar(c fiber.Ctx) error {
+// calendarWindow lee ?from=…&to=… en RFC 3339 (el calendario de publicaciones y de proveedores).
+func calendarWindow(c fiber.Ctx) (time.Time, time.Time, error) {
 	from, errFrom := time.Parse(time.RFC3339, c.Query("from"))
 	to, errTo := time.Parse(time.RFC3339, c.Query("to"))
 	if errFrom != nil || errTo != nil {
-		return badRequest("Indica from y to en formato RFC 3339.")
+		return time.Time{}, time.Time{}, badRequest("Indica from y to en formato RFC 3339.")
 	}
-	blocks, err := h.listings.Calendar(c.Context(), actorID(c), c.Params("id"), from, to)
-	if err != nil {
-		return err
-	}
+	return from, to, nil
+}
+
+// sendBlocks responde {"blocks": [...]}.
+func sendBlocks(c fiber.Ctx, blocks []domain.AvailabilityBlock) error {
 	out := make([]blockResponse, len(blocks))
 	for i, b := range blocks {
 		out[i] = toBlockResponse(b)
@@ -338,14 +339,35 @@ func (h *ListingHandler) Calendar(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"blocks": out})
 }
 
-// POST /api/v1/me/listings/:id/availability → 201 {"start", "end", "note"}; el fin no se incluye.
-func (h *ListingHandler) BlockDates(c fiber.Ctx) error {
+// bindBlock lee {"start", "end", "note"}; el fin no se incluye.
+func bindBlock(c fiber.Ctx) (domain.AvailabilityBlock, error) {
 	var req blockRequest
 	if err := bindJSON(c, &req); err != nil {
+		return domain.AvailabilityBlock{}, err
+	}
+	return domain.AvailabilityBlock{Start: req.Start, End: req.End, Note: req.Note}, nil
+}
+
+// GET /api/v1/me/listings/:id/availability?from=2026-10-01T00:00:00-05:00&to=...
+func (h *ListingHandler) Calendar(c fiber.Ctx) error {
+	from, to, err := calendarWindow(c)
+	if err != nil {
 		return err
 	}
-	b, err := h.listings.BlockDates(c.Context(), actorID(c), c.Params("id"),
-		domain.AvailabilityBlock{Start: req.Start, End: req.End, Note: req.Note}, c.IP())
+	blocks, err := h.listings.Calendar(c.Context(), actorID(c), c.Params("id"), from, to)
+	if err != nil {
+		return err
+	}
+	return sendBlocks(c, blocks)
+}
+
+// POST /api/v1/me/listings/:id/availability → 201 {"start", "end", "note"}; el fin no se incluye.
+func (h *ListingHandler) BlockDates(c fiber.Ctx) error {
+	block, err := bindBlock(c)
+	if err != nil {
+		return err
+	}
+	b, err := h.listings.BlockDates(c.Context(), actorID(c), c.Params("id"), block, c.IP())
 	if err != nil {
 		return err
 	}
