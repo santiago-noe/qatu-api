@@ -1,0 +1,49 @@
+meta {
+  name: Activar perfil de proveedor
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/me/provider
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "business_name": "Gasfitería Rápida",
+    "phone": "987 654 321",
+    "city": "ayacucho",
+    "bio": "Gasfitero con 8 años arreglando termas, fugas y griferías en casas de Huamanga.",
+    "years_experience": 8,
+    "warranty_days": 15,
+    "accepts_urgent": true,
+    "trades": [
+      {
+        "category_id": "{{tradeId}}",
+        "hourly_rate": 2500,
+        "min_hours": 2,
+        "packages": [
+          { "title": "Cambio de grifería", "description": "Sin materiales.", "price": 6000, "duration_minutes": 60 }
+        ]
+      }
+    ],
+    "coverage_zone_ids": ["{{zoneId}}"],
+    "weekly": [
+      { "weekday": 1, "start": "08:00", "end": "13:00" },
+      { "weekday": 1, "start": "15:00", "end": "18:00" },
+      { "weekday": 6, "start": "09:00", "end": "13:00" }
+    ],
+    "accept_terms": true
+  }
+}
+
+script:post-response {
+  if (res.status < 300 && res.body?.provider) bru.setEnvVar("providerVersion", res.body.provider.version);
+}
+
+docs {
+  Pide el correo verificado. tradeId sale de 04 Catálogo público / Oficios y zoneId de Distritos.
+  Queda en borrador; warranty_days omitido = 15.
+}
