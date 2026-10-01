@@ -14,3 +14,7 @@ params:query {
   vertical: service
   city: ayacucho
 }
+
+script:post-response {
+  if (res.status === 200 && res.body.categories?.length) bru.setEnvVar("tradeId", res.body.categories[0].id);
+}
